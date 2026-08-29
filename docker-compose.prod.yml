@@ -1,0 +1,65 @@
+services:
+  postgis-db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: auraner-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${AURANER_DB_NAME:-auraner_db}
+      POSTGRES_USER: ${AURANER_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${AURANER_DB_PASSWORD:-postgrespassword}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AURANER_DB_USER:-postgres} -d ${AURANER_DB_NAME:-auraner_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: auraner-redis-prod
+    restart: always
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./project
+      dockerfile: Dockerfile
+    container_name: auraner-backend-prod
+    restart: always
+    environment:
+      AURANER_DB_HOST: postgis-db
+      AURANER_DB_PORT: 5432
+      AURANER_DB_NAME: ${AURANER_DB_NAME:-auraner_db}
+      AURANER_DB_USER: ${AURANER_DB_USER:-postgres}
+      AURANER_DB_PASSWORD: ${AURANER_DB_PASSWORD:-postgrespassword}
+      REDIS_HOST: redis-cache
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      TOMTOM_API_KEY: ${TOMTOM_API_KEY:-6rZ5FVNhVl1RKi5TjGZTjw3CgqNxcAxK}
+    depends_on:
+      postgis-db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: auraner-frontend-prod
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_prod_data:
+  redis_prod_data:
