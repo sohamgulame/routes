@@ -43,7 +43,7 @@ public class IncidentReport {
     @Column(nullable = false)
     private Double longitude;
 
-    @Column(name = "photo_url", length = 500)
+    @Column(name = "photo_url", columnDefinition = "TEXT")
     private String photoUrl;
 
     @Column(columnDefinition = "TEXT")
