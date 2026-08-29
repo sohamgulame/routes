@@ -98,22 +98,36 @@ export default function DistrictIsolationHeatmap({ districts = [] }) {
           </div>
         </div>
 
-        {/* State Filter Pills */}
-        <div className="flex items-center gap-1.5 flex-wrap pt-5 mt-5 border-t border-[#14294a]">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase mr-1">Filter by State:</span>
-          {NER_STATES.map((st) => (
-            <button
-              key={st}
-              onClick={() => setSelectedState(st)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
-                selectedState === st
-                  ? 'bg-sky-500/20 text-sky-300 border border-sky-400'
-                  : 'bg-[#050c1a] text-slate-400 border border-[#14294a] hover:text-white'
-              }`}
-            >
-              {st}
-            </button>
-          ))}
+        {/* State & Status Filter Controls */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-5 mt-5 border-t border-[#14294a]">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase mr-1">Filter State:</span>
+            {NER_STATES.map((st) => (
+              <button
+                key={st}
+                onClick={() => setSelectedState(st)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                  selectedState === st
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-400 shadow-sm'
+                    : 'bg-[#050c1a] text-slate-400 border border-[#14294a] hover:text-white'
+                }`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
+
+          {/* Real-Time District Search Input */}
+          <div className="relative w-full sm:w-64">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search district or hub..."
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#050c1a] border border-[#14294a] focus:border-sky-400 text-xs text-white placeholder-slate-500 outline-none transition"
+            />
+            <Filter className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          </div>
         </div>
       </div>
 
