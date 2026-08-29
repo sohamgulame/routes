@@ -4,8 +4,15 @@ import com.Project1.project.dto.AlertDtos.*;
 import com.Project1.project.dto.WebSocketDtos.DisruptionAlertMessage;
 import com.Project1.project.entity.Convoy;
 import com.Project1.project.repository.ConvoyRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -15,18 +22,38 @@ import java.util.stream.Collectors;
 @Service
 public class AlertNotificationService {
 
+    private static final Logger log = LoggerFactory.getLogger(AlertNotificationService.class);
+
     private final ConvoyRepository convoyRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final WebClient webClient;
+
+    @Value("${app.sms.gateway.provider:FAST2SMS}")
+    private String gatewayProvider;
+
+    @Value("${app.sms.gateway.api-key:}")
+    private String fast2SmsApiKey;
+
+    @Value("${app.sms.twilio.account-sid:}")
+    private String twilioAccountSid;
+
+    @Value("${app.sms.twilio.auth-token:}")
+    private String twilioAuthToken;
+
+    @Value("${app.sms.twilio.from-number:}")
+    private String twilioFromNumber;
     
     // In-memory audit log of recently dispatched emergency broadcasts
     private final Deque<AlertDispatchResultDto> alertHistory = new ConcurrentLinkedDeque<>();
 
     public AlertNotificationService(
             ConvoyRepository convoyRepository,
-            SimpMessagingTemplate messagingTemplate
+            SimpMessagingTemplate messagingTemplate,
+            WebClient.Builder webClientBuilder
     ) {
         this.convoyRepository = convoyRepository;
         this.messagingTemplate = messagingTemplate;
+        this.webClient = webClientBuilder.build();
     }
 
     /**
@@ -64,13 +91,23 @@ public class AlertNotificationService {
         int smsCount = 0;
         int whatsappCount = 0;
 
+        String messageBody = String.format("[AURA-NER EMERGENCY BROADCAST]: %s corridor (%s) is %s. %s Recommended Safety Bypass: %s",
+                request.highwayCode() != null ? request.highwayCode() : "Transit Corridor",
+                request.hazardLocation() != null ? request.hazardLocation() : "Active Sector",
+                request.hazardType() != null ? request.hazardType() : "DISRUPTED",
+                request.message() != null ? request.message() : "Exercise extreme caution.",
+                request.recommendedBypass() != null ? request.recommendedBypass() : "Follow state command guidance.");
+
         // 1. Dispatch SMS Alerts via Fast2SMS / Twilio Gateway
         if (channels.contains("SMS")) {
             for (Convoy convoy : targetedConvoys) {
-                String phone = convoy.getDriverPhone() != null ? convoy.getDriverPhone() : "+91-9876543210";
-                String driver = convoy.getDriverName() != null ? convoy.getDriverName() : "Fleet Driver";
-                System.out.printf("[SMS GATEWAY DISPATCH] -> To: %s (%s) | Msg: [AURA-NER EMERGENCY]: %s (%s) is %s. %s Bypass: %s%n",
-                        phone, driver, request.highwayCode(), request.hazardLocation(), request.hazardType(), request.message(), request.recommendedBypass());
+                String rawPhone = convoy.getDriverPhone() != null ? convoy.getDriverPhone() : "+91-9876543210";
+                String cleanPhone = rawPhone.replaceAll("[^0-9]", "");
+                if (cleanPhone.length() > 10) {
+                    cleanPhone = cleanPhone.substring(cleanPhone.length() - 10);
+                }
+
+                sendRealSms(cleanPhone, messageBody);
                 smsCount++;
             }
         }
@@ -79,8 +116,7 @@ public class AlertNotificationService {
         if (channels.contains("WHATSAPP")) {
             for (Convoy convoy : targetedConvoys) {
                 String phone = convoy.getDriverPhone() != null ? convoy.getDriverPhone() : "+91-9876543210";
-                System.out.printf("[WHATSAPP BOT DISPATCH] -> Template [disruption_alert_v2] sent to %s with bypass corridor: %s%n",
-                        phone, request.recommendedBypass());
+                sendRealWhatsApp(phone, messageBody);
                 whatsappCount++;
             }
         }
@@ -126,6 +162,97 @@ public class AlertNotificationService {
         }
 
         return result;
+    }
+
+    /**
+     * Sends real SMS via Fast2SMS / Twilio API or logs structured telemetry
+     */
+    private void sendRealSms(String phone10Digits, String message) {
+        if ("FAST2SMS".equalsIgnoreCase(gatewayProvider) && fast2SmsApiKey != null && !fast2SmsApiKey.isBlank()) {
+            try {
+                Map<String, Object> body = Map.of(
+                        "route", "q",
+                        "message", message,
+                        "language", "english",
+                        "flash", 0,
+                        "numbers", phone10Digits
+                );
+
+                webClient.post()
+                        .uri("https://www.fast2sms.com/dev/bulkV2")
+                        .header("authorization", fast2SmsApiKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(body)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .subscribe(
+                                res -> log.info("[FAST2SMS LIVE DISPATCH SUCCESS] Sent to {}: {}", phone10Digits, res),
+                                err -> log.warn("[FAST2SMS DISPATCH FAILED] {}: {}", phone10Digits, err.getMessage())
+                        );
+                return;
+            } catch (Exception e) {
+                log.warn("[FAST2SMS ERROR] Exception sending to {}: {}", phone10Digits, e.getMessage());
+            }
+        } else if ("TWILIO".equalsIgnoreCase(gatewayProvider) && twilioAccountSid != null && !twilioAccountSid.isBlank()) {
+            try {
+                String url = String.format("https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json", twilioAccountSid);
+                webClient.post()
+                        .uri(url)
+                        .headers(h -> h.setBasicAuth(twilioAccountSid, twilioAuthToken))
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .body(BodyInserters.fromFormData("To", "+91" + phone10Digits)
+                                .with("From", twilioFromNumber)
+                                .with("Body", message))
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .subscribe(
+                                res -> log.info("[TWILIO SMS DISPATCH SUCCESS] Sent to +91{}: {}", phone10Digits, res),
+                                err -> log.warn("[TWILIO SMS DISPATCH FAILED] +91{}: {}", phone10Digits, err.getMessage())
+                        );
+                return;
+            } catch (Exception e) {
+                log.warn("[TWILIO ERROR] Exception sending to +91{}: {}", phone10Digits, e.getMessage());
+            }
+        }
+
+        // Live Simulated Gateway Telemetry Log
+        log.info("[EMERGENCY SMS GATEWAY DISPATCH] -> To: +91-{} | Text: {}", phone10Digits, message);
+    }
+
+    /**
+     * Sends WhatsApp message via Twilio WhatsApp API or logs structured telemetry
+     */
+    private void sendRealWhatsApp(String phone, String message) {
+        String clean = phone != null ? phone.replaceAll("[^0-9]", "") : "919876543210";
+        if (clean.length() == 10) {
+            clean = "91" + clean;
+        }
+        final String targetPhone = clean;
+
+        if (twilioAccountSid != null && !twilioAccountSid.isBlank() && twilioAuthToken != null && !twilioAuthToken.isBlank()) {
+            try {
+                String url = String.format("https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json", twilioAccountSid);
+                webClient.post()
+                        .uri(url)
+                        .headers(h -> h.setBasicAuth(twilioAccountSid, twilioAuthToken))
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .body(BodyInserters.fromFormData("To", "whatsapp:+" + targetPhone)
+                                .with("From", "whatsapp:" + twilioFromNumber)
+                                .with("Body", message))
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .subscribe(
+                                res -> log.info("[TWILIO WHATSAPP DISPATCH SUCCESS] Sent to whatsapp:+{}: {}", targetPhone, res),
+                                err -> log.warn("[TWILIO WHATSAPP DISPATCH FAILED] whatsapp:+{}: {}", targetPhone, err.getMessage())
+                        );
+                return;
+            } catch (Exception e) {
+                log.warn("[WHATSAPP GATEWAY ERROR] {}", e.getMessage());
+            }
+        }
+
+        // Simulated WhatsApp Bot payload
+        log.info("[WHATSAPP BUSINESS BOT DISPATCH] -> To: {} | Template: [disruption_alert_v2] | Text: {}", phone, message);
     }
 
     public List<AlertDispatchResultDto> getAlertHistory() {
