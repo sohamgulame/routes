@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { searchLocations } from '../services/geocoding';
 import { calculateUniversalRoute, calculateMultiWaypointRoute, calculateAllRouteAlternatives, snapToNearestHighway } from '../services/osrm';
+import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import XaiWaterfallChart from './XaiWaterfallChart';
 
@@ -48,19 +49,19 @@ const RIVER_ACCESSIBLE_LOCATIONS = [
 ];
 
 // Universal Spatial Polyline Hazard Collision Detection
-// Checks if any active verified ground hazard lies within ~11 km corridor buffer of the route
+// Checks if any active verified ground hazard lies within ~15 km corridor buffer of the route
 function getHazardsOnPolyline(polyline, incidentList) {
   if (!polyline || polyline.length === 0 || !incidentList || incidentList.length === 0) return [];
   const active = incidentList.filter((inc) => {
-    const status = (inc.verificationStatus || '').toUpperCase();
-    return status === 'VERIFIED' || status === 'ACTIVE';
+    const status = (inc.verificationStatus || inc.status || '').toUpperCase();
+    return status === 'VERIFIED' || status === 'ACTIVE' || status === 'CAUTION' || status === 'BLOCKED' || status === 'HIGH';
   });
   if (active.length === 0) return [];
 
   const hits = [];
   for (const inc of active) {
-    const iLat = Number(inc.latitude);
-    const iLng = Number(inc.longitude);
+    const iLat = Number(inc.latitude ?? inc.lat);
+    const iLng = Number(inc.longitude ?? inc.lng);
     if (isNaN(iLat) || isNaN(iLng)) continue;
 
     let isNear = false;
@@ -69,8 +70,8 @@ function getHazardsOnPolyline(polyline, incidentList) {
       const dLat = pLat - iLat;
       const dLng = pLng - iLng;
       const distDeg = Math.sqrt(dLat * dLat + dLng * dLng);
-      // 0.10 degrees ~ 11.1 km buffer around the asphalt center line
-      if (distDeg < 0.10) {
+      // 0.14 degrees ~ 15.5 km corridor buffer around the asphalt center line
+      if (distDeg < 0.14) {
         isNear = true;
         break;
       }
@@ -291,9 +292,19 @@ export default function RoutePlanner({
       // =========================================================================
       // DYNAMIC SPATIAL HAZARD COLLISION FOR ALL 3 ROUTES
       // =========================================================================
-      const hitsA = getHazardsOnPolyline(directCoords, incidents);
-      const hitsB = getHazardsOnPolyline(bypassCoords, incidents);
-      const hitsC = getHazardsOnPolyline(cCoords, incidents);
+      let liveIncidents = incidents;
+      try {
+        const freshRes = await api.getRecentIncidents();
+        if (freshRes?.data && Array.isArray(freshRes.data)) {
+          liveIncidents = freshRes.data;
+        }
+      } catch (e) {
+        console.warn('Using prop incidents for hazard check:', e);
+      }
+
+      const hitsA = getHazardsOnPolyline(directCoords, liveIncidents);
+      const hitsB = getHazardsOnPolyline(bypassCoords, liveIncidents);
+      const hitsC = getHazardsOnPolyline(cCoords, liveIncidents);
 
       const hasHazardA = hitsA.length > 0;
       const hasHazardB = hitsB.length > 0;

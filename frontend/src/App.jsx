@@ -489,6 +489,7 @@ function MainApp() {
 
           {activeTab === 'route_planner' && (
             <RoutePlanner
+              incidents={incidents}
               roadSegments={roadSegments}
               savedRoutePlan={savedRoutePlan}
               onSaveRoutePlan={(plan) => setSavedRoutePlan(plan)}
