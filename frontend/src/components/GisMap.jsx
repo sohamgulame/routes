@@ -608,11 +608,11 @@ export default function GisMap({
         {/* Real-Time Satellite Precipitation & Cloudburst Radar Overlay */}
         {showRainRadar && radarPath && (
           <TileLayer
-            key={`radar-${radarPath}`}
+            key={`radar-tile-${radarPath}-z7`}
             url={`https://tilecache.rainviewer.com${radarPath}/256/{z}/{x}/{y}/2/1_1.png`}
             opacity={0.65}
-            maxNativeZoom={12}
-            minNativeZoom={2}
+            maxNativeZoom={7}
+            minNativeZoom={1}
             maxZoom={19}
             tileSize={256}
             zIndex={350}
