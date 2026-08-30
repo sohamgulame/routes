@@ -18,6 +18,7 @@ import {
 import { searchLocations } from '../services/geocoding';
 import { calculateUniversalRoute, calculateMultiWaypointRoute, calculateAllRouteAlternatives, snapToNearestHighway } from '../services/osrm';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import XaiWaterfallChart from './XaiWaterfallChart';
 
@@ -92,6 +93,7 @@ export default function RoutePlanner({
   onDispatchViaRoute
 }) {
   const { toast } = useToast();
+  const { isTransporter, isAdmin } = useAuth();
   // Origin Search State (Empty by default, or restored from saved session)
   const [originQuery, setOriginQuery] = useState(savedRoutePlan?.originQuery || '');
   const [originCoords, setOriginCoords] = useState(savedRoutePlan?.originCoords || null);
@@ -199,7 +201,7 @@ export default function RoutePlanner({
       const dLat = activeDestCoords[0] - activeOriginCoords[0];
       const dLng = activeDestCoords[1] - activeOriginCoords[1];
       const distDeg = Math.sqrt(dLat * dLat + dLng * dLng) || 0.05;
-      
+
       // Gentle lateral offset (calibrated: 1.2km to 15km max)
       const scaleDeg = Math.min(0.05, Math.max(0.012, distDeg * 0.10));
 
@@ -685,8 +687,8 @@ export default function RoutePlanner({
                   key={opt.routeId}
                   onClick={() => handleSelectOption(opt)}
                   className={`cursor-pointer p-5 rounded-2xl border transition-all duration-200 relative group ${isSelected
-                      ? 'bg-[#0a182e] border-sky-400 shadow-xl shadow-sky-400/20 ring-2 ring-sky-400/40'
-                      : 'bg-[#081328] border-[#14294a] hover:border-teal-400 hover:bg-[#0c1d38]'
+                    ? 'bg-[#0a182e] border-sky-400 shadow-xl shadow-sky-400/20 ring-2 ring-sky-400/40'
+                    : 'bg-[#081328] border-[#14294a] hover:border-teal-400 hover:bg-[#0c1d38]'
                     }`}
                 >
                   {opt.activeHazard && (
@@ -753,28 +755,30 @@ export default function RoutePlanner({
                       <ExternalLink className="w-3.5 h-3.5" />
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const origStr = typeof originQuery === 'string' ? originQuery : (originQuery?.displayName || originQuery?.name || '');
-                        const destStr = typeof destinationQuery === 'string' ? destinationQuery : (destinationQuery?.displayName || destinationQuery?.name || '');
-                        onDispatchViaRoute?.({
-                          originCity: origStr,
-                          originCoords: opt.originCoords || originCoords,
-                          destinationCity: destStr,
-                          destinationCoords: opt.destinationCoords || destinationCoords,
-                          assignedRouteSummary: opt.routeName,
-                          estimatedArrivalHours: opt.estimatedHours,
-                          snappedCoordinates: opt.snappedCoordinates
-                        });
-                      }}
-                      className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-lg shadow-emerald-500/20 cursor-pointer"
-                    >
-                      <Truck className="w-3.5 h-3.5" />
-                      <span>Dispatch Convoy via This Route</span>
-                    </button>
+                    {(isTransporter || isAdmin) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const origStr = typeof originQuery === 'string' ? originQuery : (originQuery?.displayName || originQuery?.name || '');
+                          const destStr = typeof destinationQuery === 'string' ? destinationQuery : (destinationQuery?.displayName || destinationQuery?.name || '');
+                          onDispatchViaRoute?.({
+                            originCity: origStr,
+                            originCoords: opt.originCoords || originCoords,
+                            destinationCity: destStr,
+                            destinationCoords: opt.destinationCoords || destinationCoords,
+                            assignedRouteSummary: opt.routeName,
+                            estimatedArrivalHours: opt.estimatedHours,
+                            snappedCoordinates: opt.snappedCoordinates
+                          });
+                        }}
+                        className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-lg shadow-emerald-500/20 cursor-pointer"
+                      >
+                        <Truck className="w-3.5 h-3.5" />
+                        <span>Dispatch Convoy via This Route</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );

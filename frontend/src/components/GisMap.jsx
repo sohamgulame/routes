@@ -898,13 +898,12 @@ export default function GisMap({
                 <div className="p-2 text-xs font-sans min-w-[200px]">
                   <div className="flex justify-between items-center border-b pb-1 mb-1">
                     <strong className="text-slate-900">{focusedConvoy.vehicleNumber}</strong>
-                    <span className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
-                      focusedConvoy.isLiveStreaming
+                    <span className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${focusedConvoy.isLiveStreaming
                         ? 'bg-cyan-100 text-cyan-800 animate-pulse'
                         : isMeds
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}>
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
                       {focusedConvoy.isLiveStreaming ? '📡 LIVE DEVICE GPS' : focusedConvoy.commodityType}
                     </span>
                   </div>
