@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip, ZoomControl,
 import { Info, X, ShieldAlert, Navigation, MapPin, Truck } from 'lucide-react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { fetchOsrmRoadGeometry } from '../services/osrm';
+import { fetchOsrmRoadGeometry, calculateMultiWaypointRoute, snapToNearestHighway } from '../services/osrm';
 import { searchLocations } from '../services/geocoding';
 
 // Fix default leaflet icon paths
@@ -173,12 +173,41 @@ export default function GisMap({
         const cId = c.id || c.convoyId;
         if (!cId || convoyRoutes[cId]) return;
 
+        // 1. Check if specific selected route polyline was stored in sessionStorage
+        let customPolyline = null;
+        try {
+          const stored = sessionStorage.getItem('aura_convoy_polyline_' + cId) ||
+            (c.vehicleNumber ? sessionStorage.getItem('aura_convoy_polyline_' + c.vehicleNumber) : null);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 1) {
+              customPolyline = parsed;
+            }
+          }
+        } catch (e) {}
+
+        if (customPolyline) {
+          setConvoyRoutes((prev) => ({
+            ...prev,
+            [cId]: {
+              polyline: customPolyline,
+              startCoords: customPolyline[0],
+              endCoords: customPolyline[customPolyline.length - 1],
+              originCity: c.originCity,
+              destinationCity: c.destinationCity,
+              vehicleNumber: c.vehicleNumber,
+              routeSummary: c.activeRouteSummary,
+            }
+          }));
+          return;
+        }
+
+        // 2. Otherwise calculate dynamically based on coordinates and route summary
         let startLat = c.originLat || c.currentLatitude || c.latitude;
         let startLng = c.originLng || c.currentLongitude || c.longitude;
         let endLat = c.destLat;
         let endLng = c.destLng;
 
-        // Dynamic OpenStreetMap Nominatim geocoding fallback if coordinates are missing
         if ((!startLat || !startLng) && c.originCity) {
           try {
             const geo = await searchLocations(c.originCity);
@@ -205,7 +234,34 @@ export default function GisMap({
 
         if (startLat && startLng && endLat && endLng) {
           try {
-            const roadCoords = await fetchOsrmRoadGeometry([startLat, startLng], [endLat, endLng]);
+            const routeSum = (c.activeRouteSummary || '').toLowerCase();
+            let roadCoords = null;
+
+            const midLat = (startLat + endLat) / 2;
+            const midLng = (startLng + endLng) / 2;
+            const dLat = endLat - startLat;
+            const dLng = endLng - startLng;
+            const distDeg = Math.sqrt(dLat * dLat + dLng * dLng) || 0.05;
+            const scaleDeg = 0.08;
+
+            if (routeSum.includes('northern') || routeSum.includes('bypass') || routeSum.includes('parallel')) {
+              // Northern / Left flank
+              const rawLeft = [midLat + (-dLng / distDeg) * scaleDeg, midLng + (dLat / distDeg) * scaleDeg];
+              const snappedLeft = await snapToNearestHighway(rawLeft[0], rawLeft[1]);
+              const resOsrm = await calculateMultiWaypointRoute([[startLat, startLng], snappedLeft, [endLat, endLng]]);
+              roadCoords = resOsrm?.coordinates;
+            } else if (routeSum.includes('southern') || routeSum.includes('arterial') || routeSum.includes('expressway')) {
+              // Southern / Right flank
+              const rawRight = [midLat + (dLng / distDeg) * scaleDeg, midLng + (-dLat / distDeg) * scaleDeg];
+              const snappedRight = await snapToNearestHighway(rawRight[0], rawRight[1]);
+              const resOsrm = await calculateMultiWaypointRoute([[startLat, startLng], snappedRight, [endLat, endLng]]);
+              roadCoords = resOsrm?.coordinates;
+            }
+
+            if (!roadCoords || roadCoords.length === 0) {
+              roadCoords = await fetchOsrmRoadGeometry([startLat, startLng], [endLat, endLng]);
+            }
+
             if (roadCoords && roadCoords.length > 0) {
               setConvoyRoutes((prev) => ({
                 ...prev,
@@ -216,6 +272,7 @@ export default function GisMap({
                   originCity: c.originCity,
                   destinationCity: c.destinationCity,
                   vehicleNumber: c.vehicleNumber,
+                  routeSummary: c.activeRouteSummary,
                 }
               }));
             }

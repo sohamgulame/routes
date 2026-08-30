@@ -132,14 +132,27 @@ export default function CreateConvoyModal({ isOpen, onClose, onConvoyCreated, in
       };
 
       const res = await api.createConvoy(payload);
+      
+      // Persist the specific selected route polyline geometry in sessionStorage
+      if (initialRouteData?.snappedCoordinates && Array.isArray(initialRouteData.snappedCoordinates)) {
+        try {
+          const polyStr = JSON.stringify(initialRouteData.snappedCoordinates);
+          sessionStorage.setItem('aura_convoy_polyline_' + vehicleNumber, polyStr);
+          if (res?.data?.id) {
+            sessionStorage.setItem('aura_convoy_polyline_' + res.data.id, polyStr);
+          }
+        } catch (err) {}
+      }
+
       toast.success(`Convoy [${vehicleNumber}] successfully dispatched to ${destinationCity}! e-Waybill manifest generated.`, 'Convoy Dispatched');
       onConvoyCreated?.(res.data);
       onClose();
     } catch (e) {
       console.error('Error creating convoy:', e);
       // Fallback local creation if network error
+      const fallbackId = 'CONVOY-' + Date.now();
       const fallbackConvoy = {
-        id: 'CONVOY-' + Date.now(),
+        id: fallbackId,
         vehicleNumber,
         driverName,
         driverPhone,
@@ -152,7 +165,17 @@ export default function CreateConvoyModal({ isOpen, onClose, onConvoyCreated, in
         currentLatitude: finalOriginLat || 26.14,
         currentLongitude: finalOriginLng || 91.73,
         createdAt: new Date().toISOString(),
+        activeRouteSummary: assignedRouteSummary,
       };
+
+      if (initialRouteData?.snappedCoordinates && Array.isArray(initialRouteData.snappedCoordinates)) {
+        try {
+          const polyStr = JSON.stringify(initialRouteData.snappedCoordinates);
+          sessionStorage.setItem('aura_convoy_polyline_' + vehicleNumber, polyStr);
+          sessionStorage.setItem('aura_convoy_polyline_' + fallbackId, polyStr);
+        } catch (err) {}
+      }
+
       toast.info(`Convoy [${vehicleNumber}] registered and queued in local offline state.`, 'Offline Dispatch');
       onConvoyCreated?.(fallbackConvoy);
       onClose();
