@@ -931,19 +931,26 @@ export default function GisMap({
 
           const isCritical = inc.severity === 'CRITICAL';
           const isVerified = inc.verificationStatus === 'VERIFIED';
+          const isClusterAlert = inc.description && inc.description.includes('CROWD CLUSTER ALERT');
 
           const hazardIcon = L.divIcon({
             className: 'custom-hazard-marker',
-            html: `
+            html: isVerified ? `
               <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;">
                 <div style="position: absolute; inset: 0; border-radius: 9999px; background: ${isCritical ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.4)'}; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
                 <div style="width: 28px; height: 28px; border-radius: 9999px; background: ${isCritical ? '#7f1d1d' : '#78350f'}; border: 2px solid ${isCritical ? '#ef4444' : '#f59e0b'}; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.8); z-index: 10;">
                   ⚠️
                 </div>
               </div>
+            ` : `
+              <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;">
+                <div style="width: 26px; height: 26px; border-radius: 9999px; background: #3b2806; border: 2px dashed #f59e0b; display: flex; align-items: center; justify-content: center; color: #fbbf24; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.6); z-index: 10;">
+                  ⏳
+                </div>
+              </div>
             `,
-            iconSize: [34, 34],
-            iconAnchor: [17, 17],
+            iconSize: isVerified ? [34, 34] : [30, 30],
+            iconAnchor: isVerified ? [17, 17] : [15, 15],
             popupAnchor: [0, -17],
           });
 
@@ -952,20 +959,31 @@ export default function GisMap({
               <Popup>
                 <div className="p-2 text-xs font-sans min-w-[220px] max-w-[280px]">
                   <div className="flex justify-between items-center border-b pb-1 mb-1.5">
-                    <strong className="text-rose-700 font-bold flex items-center gap-1">
-                      <span>⚠️</span> {inc.incidentType || 'ROAD HAZARD'}
+                    <strong className={`${isVerified ? 'text-rose-700' : 'text-amber-600'} font-bold flex items-center gap-1`}>
+                      <span>{isVerified ? '⚠️' : '⏳'}</span> {inc.incidentType || 'ROAD HAZARD'}
                     </strong>
-                    <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] uppercase ${isCritical ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>
-                      {inc.severity}
+                    <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] uppercase ${
+                      isVerified
+                        ? (isCritical ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')
+                        : 'bg-amber-100 text-amber-900 border border-amber-400/50'
+                    }`}>
+                      {isVerified ? inc.severity : 'PENDING REVIEW'}
                     </span>
                   </div>
+
+                  {isClusterAlert && (
+                    <div className="mb-1.5 px-2 py-0.5 rounded-md bg-rose-100 border border-rose-300 text-rose-800 font-bold text-[10px] flex items-center gap-1">
+                      <span>🚨</span>
+                      <span>High Cluster (3+ Citizen Reports)</span>
+                    </div>
+                  )}
 
                   <p className="text-slate-800 font-semibold mb-1">
                     {inc.roadSegmentName || 'Corridor Coordinate'}
                   </p>
 
                   <p className="text-slate-600 text-[11px] mb-1.5 leading-relaxed">
-                    {inc.description || 'Ground hazard reported. Transit delay expected.'}
+                    {inc.description ? inc.description.replace(/\[🚨 CROWD CLUSTER ALERT:.*?\]/g, '').trim() : 'Ground hazard reported.'}
                   </p>
 
                   {inc.photoUrl && (
@@ -975,7 +993,9 @@ export default function GisMap({
                   )}
 
                   <div className="pt-1.5 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-500">
-                    <span>{isVerified ? '🛡️ Verified' : '⏳ Pending Review'}</span>
+                    <span className={isVerified ? 'text-emerald-700 font-bold' : 'text-amber-600 font-bold'}>
+                      {isVerified ? '🛡️ Verified (Corridor Closed)' : '⏳ Crowd Notice (Pending SDMA Review)'}
+                    </span>
                     <span className="font-mono">{lat.toFixed(3)}°N, {lng.toFixed(3)}°E</span>
                   </div>
                 </div>

@@ -231,39 +231,48 @@ export default function IncidentVerificationQueue({ onIncidentResolved }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#14294a]/60">
-                    {pendingIncidents.map((inc) => (
-                      <tr key={inc.id} className="hover:bg-[#0a1828]/60 transition">
-                        <td className="py-4 px-3">
-                          <span className="font-bold text-white font-mono flex items-center gap-1.5">
-                            <span>⚠️</span> {inc.incidentType}
-                          </span>
-                        </td>
+                    {pendingIncidents.map((inc) => {
+                      const isCluster = inc.description && inc.description.includes('CROWD CLUSTER ALERT');
+                      const cleanDesc = inc.description ? inc.description.replace(/\[🚨 CROWD CLUSTER ALERT:.*?\]/g, '').trim() : 'Ground hazard reported.';
 
-                        <td className="py-4 px-3">
-                          <div className="font-semibold text-slate-200">{inc.roadSegmentName || 'Corridor Coordinate'}</div>
-                          <div className="text-slate-400 font-mono text-[11px] mt-0.5">
-                            {Number(inc.latitude || 25.45).toFixed(4)}°N, {Number(inc.longitude || 92.20).toFixed(4)}°E
-                          </div>
-                        </td>
+                      return (
+                        <tr key={inc.id} className={`transition ${isCluster ? 'bg-rose-950/30 border-l-4 border-l-rose-500 hover:bg-rose-950/40' : 'hover:bg-[#0a1828]/60'}`}>
+                          <td className="py-4 px-3">
+                            <span className="font-bold text-white font-mono flex items-center gap-1.5">
+                              <span>⚠️</span> {inc.incidentType}
+                            </span>
+                            {isCluster && (
+                              <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-rose-600 text-white shadow-sm animate-pulse">
+                                <span>🚨</span> 3+ Crowd Reports
+                              </span>
+                            )}
+                          </td>
 
-                        <td className="py-4 px-3">
-                          <span className={`px-2.5 py-0.5 rounded font-bold text-[10px] ${
-                            inc.severity === 'CRITICAL' 
-                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
-                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          }`}>
-                            {inc.severity}
-                          </span>
-                        </td>
+                          <td className="py-4 px-3">
+                            <div className="font-semibold text-slate-200">{inc.roadSegmentName || 'Corridor Coordinate'}</div>
+                            <div className="text-slate-400 font-mono text-[11px] mt-0.5">
+                              {Number(inc.latitude || 25.45).toFixed(4)}°N, {Number(inc.longitude || 92.20).toFixed(4)}°E
+                            </div>
+                          </td>
 
-                        <td className="py-4 px-3">
-                          <div className="text-white font-medium">{inc.reporterName || 'Citizen Reporter'}</div>
-                          <div className="text-slate-400 text-[10px] uppercase">{inc.reporterRole || 'PUBLIC'}</div>
-                        </td>
+                          <td className="py-4 px-3">
+                            <span className={`px-2.5 py-0.5 rounded font-bold text-[10px] ${
+                              inc.severity === 'CRITICAL' || isCluster
+                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
+                                : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            }`}>
+                              {isCluster ? 'URGENT CLUSTER' : inc.severity}
+                            </span>
+                          </td>
 
-                        <td className="py-4 px-3 max-w-xs">
-                          <p className="text-slate-300 truncate">{inc.description}</p>
-                        </td>
+                          <td className="py-4 px-3">
+                            <div className="text-white font-medium">{inc.reporterName || 'Citizen Reporter'}</div>
+                            <div className="text-slate-400 text-[10px] uppercase">{inc.reporterRole || 'PUBLIC'}</div>
+                          </td>
+
+                          <td className="py-4 px-3 max-w-xs">
+                            <p className="text-slate-300 truncate" title={cleanDesc}>{cleanDesc}</p>
+                          </td>
 
                         <td className="py-4 px-3 text-right space-x-2">
                           <button

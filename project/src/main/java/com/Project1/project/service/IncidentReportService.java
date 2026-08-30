@@ -44,6 +44,13 @@ public class IncidentReportService {
     public List<IncidentReportDto> getPendingQueue() {
         return incidentReportRepository.findPendingVerificationQueue()
                 .stream()
+                .sorted((a, b) -> {
+                    boolean aCluster = a.getDescription() != null && a.getDescription().contains("[🚨 CROWD CLUSTER ALERT]");
+                    boolean bCluster = b.getDescription() != null && b.getDescription().contains("[🚨 CROWD CLUSTER ALERT]");
+                    if (aCluster && !bCluster) return -1;
+                    if (!aCluster && bCluster) return 1;
+                    return 0;
+                })
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
@@ -76,6 +83,22 @@ public class IncidentReportService {
         );
         String verificationStatus = isOfficial ? "VERIFIED" : "PENDING";
 
+        String desc = req.description();
+        if (!isOfficial && req.latitude() != null && req.longitude() != null) {
+            try {
+                int recentCount = incidentReportRepository.countRecentReportsNear(
+                        req.latitude(),
+                        req.longitude(),
+                        LocalDateTime.now().minusMinutes(30)
+                );
+                if (recentCount >= 2) {
+                    desc = (desc != null ? desc + " " : "") + "[🚨 CROWD CLUSTER ALERT: 3+ Citizen Reports in past 30 min]";
+                }
+            } catch (Exception e) {
+                // Ignore spatial count error
+            }
+        }
+
         IncidentReport incident = new IncidentReport(
                 UUID.randomUUID().toString(),
                 reporter,
@@ -88,7 +111,7 @@ public class IncidentReportService {
                 req.latitude(),
                 req.longitude(),
                 req.photoUrl(),
-                req.description(),
+                desc,
                 verificationStatus,
                 isOfficial ? reporter.getFullName() : null,
                 req.syncedFromOffline() != null ? req.syncedFromOffline() : false,
