@@ -1,7 +1,7 @@
 databases:
   - name: auraner-db
     databaseName: auraner_db
-    user: postgres
+    user: auraner_user
     plan: free
     postgresMajorVersion: "16"
 
