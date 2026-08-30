@@ -127,11 +127,27 @@ export async function calculateAllRouteAlternatives(start, end) {
         const freightMultiplier = idx === 0 ? 1.65 : 1.70;
         const durationHours = Math.round((rawCarHours * freightMultiplier) * 10) / 10;
 
+        // Extract primary highway/street names from leg steps
+        let roadSummary = route.legs?.[0]?.summary || '';
+        if (!roadSummary || roadSummary.trim() === '') {
+          const stepNames = (route.legs?.[0]?.steps || [])
+            .map((s) => s.name)
+            .filter((n) => n && n.trim().length > 1 && !n.includes('Destination') && !n.includes('Depart'));
+          const uniqueNames = [...new Set(stepNames)];
+          if (uniqueNames.length > 0) {
+            roadSummary = uniqueNames.slice(0, 2).join(' / ');
+          }
+        }
+
+        if (!roadSummary) {
+          roadSummary = idx === 0 ? 'Primary Highway Corridor' : `Parallel Arterial Route ${idx + 1}`;
+        }
+
         return {
           distanceKm,
           durationHours,
           coordinates,
-          summary: route.legs?.[0]?.summary || (idx === 0 ? 'Primary National Highway' : `Parallel State Highway Corridor ${idx}`),
+          summary: roadSummary,
         };
       });
     }

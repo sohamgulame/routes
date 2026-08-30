@@ -195,21 +195,18 @@ export default function RoutePlanner({
       const directHours = directRoute.durationHours;
       const directCoords = directRoute.coordinates;
 
-      // Distance and directional vector for spatial bypass calculations
-      const midLat = (activeOriginCoords[0] + activeDestCoords[0]) / 2;
-      const midLng = (activeOriginCoords[1] + activeDestCoords[1]) / 2;
+      // Vector calculations for smooth forward-progressing corridors
       const dLat = activeDestCoords[0] - activeOriginCoords[0];
       const dLng = activeDestCoords[1] - activeOriginCoords[1];
       const distDeg = Math.sqrt(dLat * dLat + dLng * dLng) || 0.05;
       
-      // Proportional lateral offset calibrated to guarantee distinct physical road corridors across any distance
-      const adaptiveOffsetKm = Math.max(8.0, Math.min(85.0, directDist * 0.22));
-      const scaleDeg = adaptiveOffsetKm / 111.0;
+      // Gentle lateral offset (calibrated: 1.2km to 15km max)
+      const scaleDeg = Math.min(0.05, Math.max(0.012, distDeg * 0.10));
 
       // Multi-point physical path divergence checker
       const isDistinctPath = (p1, p2) => {
         if (!p1 || !p2 || p1.length < 5 || p2.length < 5) return false;
-        const sampleFractions = [0.25, 0.4, 0.5, 0.6, 0.75];
+        const sampleFractions = [0.25, 0.5, 0.75];
         let maxDeviation = 0;
         for (const frac of sampleFractions) {
           const m1 = p1[Math.floor(p1.length * frac)];
@@ -219,22 +216,25 @@ export default function RoutePlanner({
             if (diff > maxDeviation) maxDeviation = diff;
           }
         }
-        return maxDeviation > 0.045; // At least ~5 km physical separation along the corridor
+        return maxDeviation > 0.015; // At least ~1.7 km distinct separation
       };
 
       // =========================================================================
-      // Strategy 2 Geometry (Northern / Left-Flank Parallel Bypass)
+      // Strategy 2 Geometry (Northern / Left Corridor)
       // =========================================================================
       let bypassDist, bypassHours, bypassCoords, optBName, optBSummary;
       if (altRoute1 && altRoute1.coordinates && isDistinctPath(altRoute1.coordinates, directCoords)) {
         bypassDist = altRoute1.distanceKm;
         bypassHours = altRoute1.durationHours;
         bypassCoords = altRoute1.coordinates;
-        optBName = `Parallel State Highway via ${altRoute1.summary || 'Regional Connector'}`;
-        optBSummary = `Bypasses primary highway toll plazas and heavy urban congestion via parallel ${altRoute1.summary || 'State Road'} corridor.`;
+        optBName = `Parallel Route via ${altRoute1.summary || 'Regional Connector'}`;
+        optBSummary = `Follows parallel paved corridor via ${altRoute1.summary || 'State Road'}.`;
       } else {
-        // Compute left lateral waypoint (normal vector: [-dLng, dLat])
-        const rawWaypointLeft = [midLat + (-dLng / distDeg) * scaleDeg, midLng + (dLat / distDeg) * scaleDeg];
+        // Forward-progressing waypoint at 40% journey distance with gentle left offset (avoids U-turns)
+        const rawWaypointLeft = [
+          activeOriginCoords[0] + (0.40 * dLat) + (-dLng / distDeg) * scaleDeg,
+          activeOriginCoords[1] + (0.40 * dLng) + (dLat / distDeg) * scaleDeg
+        ];
         const snappedLeft = await snapToNearestHighway(rawWaypointLeft[0], rawWaypointLeft[1]);
         const bypassOsrm = await calculateMultiWaypointRoute([activeOriginCoords, snappedLeft, activeDestCoords]);
 
@@ -242,19 +242,19 @@ export default function RoutePlanner({
           bypassDist = bypassOsrm.distanceKm;
           bypassHours = bypassOsrm.durationHours;
           bypassCoords = bypassOsrm.coordinates;
-          optBName = `Northern Regional Bypass via ${bypassOsrm.summary || 'Parallel Link'}`;
-          optBSummary = `Provides verified parallel highway connectivity, reducing weather and congestion delay probability.`;
+          optBName = `Northern Corridor via ${bypassOsrm.summary || 'Parallel Link'}`;
+          optBSummary = `Paved parallel transit corridor via ${bypassOsrm.summary || 'connected highway'}.`;
         } else {
-          bypassDist = Math.round(directDist * 1.15 * 10) / 10;
-          bypassHours = Math.round(directHours * 1.20 * 10) / 10;
+          bypassDist = Math.round(directDist * 1.08 * 10) / 10;
+          bypassHours = Math.round(directHours * 1.10 * 10) / 10;
           bypassCoords = [activeOriginCoords, snappedLeft, activeDestCoords];
-          optBName = `Northern Regional Bypass Corridor`;
-          optBSummary = `Provides verified parallel highway connectivity, avoiding primary corridor choke points.`;
+          optBName = `Northern Corridor via Connected Road`;
+          optBSummary = `Provides verified parallel highway connectivity along northern avenue.`;
         }
       }
 
       // =========================================================================
-      // Strategy 3 Geometry (Southern / Right-Flank Arterial Corridor or River NW-2)
+      // Strategy 3 Geometry (Southern / Right Corridor or River NW-2)
       // =========================================================================
       const isOriginRiver = RIVER_ACCESSIBLE_LOCATIONS.some((loc) => originQuery.toLowerCase().includes(loc));
       const isDestRiver = RIVER_ACCESSIBLE_LOCATIONS.some((loc) => destinationQuery.toLowerCase().includes(loc));
@@ -274,8 +274,11 @@ export default function RoutePlanner({
           cCoords = altRoute2.coordinates;
           cSummary = altRoute2.summary || 'Secondary Arterial Road';
         } else {
-          // Compute right lateral waypoint (normal vector: [dLng, -dLat])
-          const rawWaypointRight = [midLat + (dLng / distDeg) * scaleDeg, midLng + (-dLat / distDeg) * scaleDeg];
+          // Forward-progressing waypoint at 60% journey distance with gentle right offset (avoids U-turns)
+          const rawWaypointRight = [
+            activeOriginCoords[0] + (0.60 * dLat) + (dLng / distDeg) * scaleDeg,
+            activeOriginCoords[1] + (0.60 * dLng) + (-dLat / distDeg) * scaleDeg
+          ];
           const snappedRight = await snapToNearestHighway(rawWaypointRight[0], rawWaypointRight[1]);
           const secOsrm = await calculateMultiWaypointRoute([activeOriginCoords, snappedRight, activeDestCoords]);
 
@@ -283,12 +286,12 @@ export default function RoutePlanner({
             cDist = secOsrm.distanceKm;
             cHours = secOsrm.durationHours;
             cCoords = secOsrm.coordinates;
-            cSummary = secOsrm.summary || 'Southern Freight Arterial';
+            cSummary = secOsrm.summary || 'Southern Arterial';
           } else {
-            cDist = Math.round(directDist * 1.18 * 10) / 10;
-            cHours = Math.round(directHours * 1.25 * 10) / 10;
+            cDist = Math.round(directDist * 1.12 * 10) / 10;
+            cHours = Math.round(directHours * 1.15 * 10) / 10;
             cCoords = [activeOriginCoords, snappedRight, activeDestCoords];
-            cSummary = 'Southern Freight Arterial Corridor';
+            cSummary = 'Southern Arterial Corridor';
           }
         }
       }
@@ -800,6 +803,10 @@ export default function RoutePlanner({
             strategyType={selectedOption.strategyType}
             riskScore={selectedOption.overallRiskScore}
             activeHazard={selectedOption.activeHazard}
+            totalDistanceKm={selectedOption.totalDistanceKm}
+            estimatedHours={selectedOption.estimatedHours}
+            routeName={selectedOption.routeName}
+            isHillRoute={selectedOption.overallRiskScore > 0.4 && !selectedOption.activeHazard}
           />
         </div>
       )}
