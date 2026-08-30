@@ -683,40 +683,6 @@ export default function GisMap({
           </>
         )}
 
-        {/* Dynamic Hazard & Traffic Disruption Markers */}
-        {roadSegments.filter((r) => r.currentStatus === 'CAUTION' || r.currentStatus === 'BLOCKED' || r.currentRiskScore > 0.5 || (r.trafficCongestionIndex && r.trafficCongestionIndex > 0.3)).map((hazard) => {
-          const pos = [25.4526, 92.2037];
-          const hasTrafficDelay = hazard.trafficCongestionIndex && hazard.trafficCongestionIndex > 0.3;
-          const isBlocked = hazard.currentStatus === 'BLOCKED';
-
-          return (
-            <Marker key={`hazard-${hazard.id}`} position={pos} icon={createCustomIcon(isBlocked ? '#ef4444' : '#f59e0b', 'ALERT')}>
-              <Popup>
-                <div className="p-2 text-xs font-sans min-w-[200px]">
-                  <h4 className="font-bold text-rose-800 flex items-center gap-1">
-                    <span>⚠️</span> {hazard.segmentName || hazard.highwayCode} Corridor
-                  </h4>
-                  <p className="text-slate-700 font-semibold mt-1">Status: <span className={isBlocked ? 'text-rose-700 font-bold' : 'text-amber-700 font-bold'}>{hazard.currentStatus}</span></p>
-                  <p className="text-slate-600 mt-0.5">{hazard.disruptionReason || 'Terrain & weather factors evaluated'}</p>
-
-                  {hazard.trafficCongestionIndex !== undefined && hazard.trafficCongestionIndex !== null && (
-                    <div className="mt-1.5 pt-1.5 border-t border-slate-200 text-[11px]">
-                      <span className="font-semibold text-slate-800">🚗 Traffic Congestion: </span>
-                      <span className={`font-bold ${hazard.trafficCongestionIndex > 0.6 ? 'text-rose-600' : hazard.trafficCongestionIndex > 0.3 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                        {Math.round(hazard.trafficCongestionIndex * 100)}% ({hazard.trafficCongestionIndex > 0.6 ? 'Heavy Congestion' : hazard.trafficCongestionIndex > 0.3 ? 'Moderate' : 'Free Flow'})
-                      </span>
-                    </div>
-                  )}
-
-                  <p className="text-rose-600 font-bold mt-1">
-                    Overall Risk Score: {Math.round((hazard.currentRiskScore || 0.7) * 100)}%
-                  </p>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-
         {/* Render Glowing Traffic-Segmented Road Polyline & Pins for the Selected/Focused Convoy */}
         {selectedConvoyId && convoyRoutes[selectedConvoyId] && (() => {
           const rData = convoyRoutes[selectedConvoyId];

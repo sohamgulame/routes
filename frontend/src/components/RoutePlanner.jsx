@@ -47,7 +47,43 @@ const RIVER_ACCESSIBLE_LOCATIONS = [
   'silghat', 'dibrugarh', 'barpeta', 'jogighopa', 'nagaon', 'sualkuchi'
 ];
 
+// Universal Spatial Polyline Hazard Collision Detection
+// Checks if any active verified ground hazard lies within ~11 km corridor buffer of the route
+function getHazardsOnPolyline(polyline, incidentList) {
+  if (!polyline || polyline.length === 0 || !incidentList || incidentList.length === 0) return [];
+  const active = incidentList.filter((inc) => {
+    const status = (inc.verificationStatus || '').toUpperCase();
+    return status === 'VERIFIED' || status === 'ACTIVE';
+  });
+  if (active.length === 0) return [];
+
+  const hits = [];
+  for (const inc of active) {
+    const iLat = Number(inc.latitude);
+    const iLng = Number(inc.longitude);
+    if (isNaN(iLat) || isNaN(iLng)) continue;
+
+    let isNear = false;
+    for (let i = 0; i < polyline.length; i++) {
+      const [pLat, pLng] = polyline[i];
+      const dLat = pLat - iLat;
+      const dLng = pLng - iLng;
+      const distDeg = Math.sqrt(dLat * dLat + dLng * dLng);
+      // 0.10 degrees ~ 11.1 km buffer around the asphalt center line
+      if (distDeg < 0.10) {
+        isNear = true;
+        break;
+      }
+    }
+    if (isNear) {
+      hits.push(inc);
+    }
+  }
+  return hits;
+}
+
 export default function RoutePlanner({
+  incidents = [],
   savedRoutePlan = null,
   onSaveRoutePlan,
   onRouteSelected,
@@ -153,51 +189,13 @@ export default function RoutePlanner({
       const altRoute1 = (allRoutes && allRoutes.length > 1) ? allRoutes[1] : null;
       const altRoute2 = (allRoutes && allRoutes.length > 2) ? allRoutes[2] : null;
 
+      // Strategy 1 Geometry (Direct Highway)
       const directDist = directRoute.distanceKm;
       const directHours = directRoute.durationHours;
       const directCoords = directRoute.coordinates;
 
-      // Check hill route characteristics
-      const isHillRoute = originQuery.toLowerCase().includes('silchar') || destinationQuery.toLowerCase().includes('silchar') ||
-        originQuery.toLowerCase().includes('shillong') || destinationQuery.toLowerCase().includes('shillong') ||
-        originQuery.toLowerCase().includes('kohima') || destinationQuery.toLowerCase().includes('kohima') ||
-        originQuery.toLowerCase().includes('tawang') || destinationQuery.toLowerCase().includes('tawang') ||
-        originQuery.toLowerCase().includes('aizawl') || destinationQuery.toLowerCase().includes('aizawl') ||
-        originQuery.toLowerCase().includes('gangtok') || destinationQuery.toLowerCase().includes('gangtok');
-
-      const hillRiskScore = isHillRoute ? 0.74 : 0.18;
-
-      const optA = {
-        routeId: 'ROUTE_OPT_A_HIGHWAY',
-        routeName: `Direct Highway via ${directRoute.summary || 'National Highway'}`,
-        strategyType: 'FASTEST',
-        totalDistanceKm: directDist,
-        estimatedHours: isHillRoute ? Math.round((directHours + 3.8) * 10) / 10 : directHours,
-        overallRiskScore: hillRiskScore,
-        riskTier: hillRiskScore > 0.5 ? 'HIGH' : 'LOW',
-        isRecommended: hillRiskScore <= 0.5,
-        originCoords: activeOriginCoords,
-        destinationCoords: activeDestCoords,
-        originLabel: originQuery,
-        destinationLabel: destinationQuery,
-        snappedCoordinates: directCoords,
-        steps: [
-          { fromHub: originQuery, toHub: destinationQuery, highwayCode: directRoute.summary || 'NH Highway', distanceKm: directDist, riskScore: hillRiskScore, status: hillRiskScore > 0.5 ? 'CAUTION' : 'OPEN' }
-        ],
-        explainability: {
-          naturalLanguageSummary: isHillRoute
-            ? `Direct highway traversal over mountain passes. Open-Meteo satellite feed detects active slope saturation near hill passes; moderate stoppage risk expected.`
-            : `Nominal weather and terrain stability across the corridor. Recommended direct transit path for ${commodity}.`,
-        }
-      };
-
-      // =========================================================================
-      // PURE UNIVERSAL STRATEGY 2: Regional Bypass / Alternate Highway (Option B)
-      // Works universally for ANY pair of coordinates in India / worldwide
-      // =========================================================================
+      // Strategy 2 Geometry (Parallel Bypass)
       let bypassDist, bypassHours, bypassCoords, optBName, optBSummary;
-
-      // 1. Check if OSRM returned a real parallel alternative within reasonable distance
       if (altRoute1 && altRoute1.coordinates && altRoute1.coordinates.length > 2 &&
           altRoute1.distanceKm !== directDist && altRoute1.distanceKm <= directDist * 1.28) {
         bypassDist = altRoute1.distanceKm;
@@ -206,13 +204,11 @@ export default function RoutePlanner({
         optBName = `Parallel State Highway via ${altRoute1.summary || 'Regional Connector'}`;
         optBSummary = `Bypasses primary highway toll plazas and heavy urban congestion via parallel ${altRoute1.summary || 'State Road'} corridor.`;
       } else {
-        // 2. Compute gentle, proportional local lateral waypoint (clamped to max 15 km)
         const midLat = (activeOriginCoords[0] + activeDestCoords[0]) / 2;
         const midLng = (activeOriginCoords[1] + activeDestCoords[1]) / 2;
         const dLat = activeDestCoords[0] - activeOriginCoords[0];
         const dLng = activeDestCoords[1] - activeOriginCoords[1];
         const distDeg = Math.sqrt(dLat * dLat + dLng * dLng) || 0.1;
-        // Keep offset strictly proportional to journey length (never sending vehicles to another state!)
         const maxOffsetKm = Math.min(15.0, Math.max(3.0, directDist * 0.08));
         const scaleDeg = maxOffsetKm / 111.0;
 
@@ -221,7 +217,6 @@ export default function RoutePlanner({
 
         const bypassOsrm = await calculateMultiWaypointRoute([activeOriginCoords, snappedWaypoint, activeDestCoords]);
 
-        // Strict Proportionality Check: Only accept if the detour is within +25% of direct distance
         if (bypassOsrm && bypassOsrm.distanceKm <= directDist * 1.25 && bypassOsrm.distanceKm >= directDist * 0.95) {
           bypassDist = bypassOsrm.distanceKm;
           bypassHours = bypassOsrm.durationHours;
@@ -229,8 +224,6 @@ export default function RoutePlanner({
           optBName = `Alternate Regional Corridor via ${bypassOsrm.summary || 'Parallel Link'}`;
           optBSummary = `Provides verified parallel highway connectivity, reducing weather and congestion delay probability.`;
         } else {
-          // If no parallel bypass exists (e.g. single mountain gorge corridor like Shillong-Guwahati),
-          // offer Regulated Safe-Speed Staggered Freight Transit along the corridor
           bypassDist = directDist;
           bypassHours = Math.round((directHours * 1.10) * 10) / 10;
           bypassCoords = directCoords;
@@ -239,66 +232,19 @@ export default function RoutePlanner({
         }
       }
 
-      const optB = {
-        routeId: 'ROUTE_OPT_B_RESILIENT',
-        routeName: optBName,
-        strategyType: 'RESILIENT_BYPASS',
-        totalDistanceKm: bypassDist,
-        estimatedHours: bypassHours,
-        overallRiskScore: Math.max(0.08, Math.round((hillRiskScore * 0.35) * 100) / 100),
-        riskTier: 'LOW',
-        isRecommended: hillRiskScore > 0.5,
-        originCoords: activeOriginCoords,
-        destinationCoords: activeDestCoords,
-        originLabel: originQuery,
-        destinationLabel: destinationQuery,
-        snappedCoordinates: bypassCoords,
-        steps: [
-          { fromHub: originQuery, toHub: 'Intermediate Logistics Waypoint', highwayCode: 'Regional Link', distanceKm: Math.round(bypassDist * 0.5), riskScore: 0.08, status: 'OPEN' },
-          { fromHub: 'Intermediate Logistics Waypoint', toHub: destinationQuery, highwayCode: 'Connected Corridor', distanceKm: Math.round(bypassDist * 0.5), riskScore: 0.10, status: 'OPEN' }
-        ],
-        explainability: {
-          naturalLanguageSummary: optBSummary,
-        }
-      };
-
-      // =========================================================================
-      // PURE UNIVERSAL STRATEGY 3: Secondary Arterial / River Barge / Outer Ring
-      // Works universally for ANY pair of coordinates in India / worldwide
-      // =========================================================================
-      let optC;
-
-      // Special Brahmaputra Waterway Option (Only if both points are river ports)
+      // Strategy 3 Geometry (Secondary Arterial / Waterway)
       const isOriginRiver = RIVER_ACCESSIBLE_LOCATIONS.some((loc) => originQuery.toLowerCase().includes(loc));
       const isDestRiver = RIVER_ACCESSIBLE_LOCATIONS.some((loc) => destinationQuery.toLowerCase().includes(loc));
       const isWaterwayFeasible = isOriginRiver && isDestRiver;
 
+      let cDist, cHours, cCoords, cSummary, waterwayCoords;
       if (isWaterwayFeasible && allowWaterways) {
-        const waterwayCoords = [activeOriginCoords, ...NW2_WATERWAY_RIVER_COORDS, activeDestCoords];
-        optC = {
-          routeId: 'ROUTE_OPT_C_WATERWAY',
-          routeName: 'National Waterway-2 River Barge Route (Pandu-Dhubri)',
-          strategyType: 'WATERWAY_NW2',
-          totalDistanceKm: Math.round(directDist * 1.45),
-          estimatedHours: Math.round(directHours * 2.2),
-          overallRiskScore: 0.05,
-          riskTier: 'LOW',
-          isRecommended: false,
-          originCoords: activeOriginCoords,
-          destinationCoords: activeDestCoords,
-          originLabel: originQuery,
-          destinationLabel: destinationQuery,
-          snappedCoordinates: waterwayCoords,
-          steps: [
-            { fromHub: 'Pandu Port (Guwahati)', toHub: 'Dhubri River Terminal', highwayCode: 'NW-2 Waterway', distanceKm: 260.0, riskScore: 0.05, status: 'OPEN', transportMode: 'RIVER_BARGE' }
-          ],
-          explainability: {
-            naturalLanguageSummary: `Zero landslide exposure via Brahmaputra river barges. 55% lower logistics carbon footprint for bulk essential supplies.`,
-          }
-        };
+        waterwayCoords = [activeOriginCoords, ...NW2_WATERWAY_RIVER_COORDS, activeDestCoords];
+        cDist = Math.round(directDist * 1.45);
+        cHours = Math.round(directHours * 2.2);
+        cCoords = waterwayCoords;
+        cSummary = 'NW-2 Waterway';
       } else {
-        // Universal Arterial Corridor for any location
-        let cDist, cHours, cCoords, cSummary;
         if (altRoute2 && altRoute2.coordinates && altRoute2.coordinates.length > 2 &&
             altRoute2.distanceKm !== directDist && altRoute2.distanceKm <= directDist * 1.30) {
           cDist = altRoute2.distanceKm;
@@ -306,7 +252,6 @@ export default function RoutePlanner({
           cCoords = altRoute2.coordinates;
           cSummary = altRoute2.summary || 'Secondary Arterial Road';
         } else {
-          // Opposite gentle lateral offset
           const midLat = (activeOriginCoords[0] + activeDestCoords[0]) / 2;
           const midLng = (activeOriginCoords[1] + activeDestCoords[1]) / 2;
           const dLat = activeDestCoords[0] - activeOriginCoords[0];
@@ -331,33 +276,148 @@ export default function RoutePlanner({
             cSummary = 'Secondary Logistics Hub Connector';
           }
         }
+      }
 
+      // Check hill route characteristics
+      const isHillRoute = originQuery.toLowerCase().includes('silchar') || destinationQuery.toLowerCase().includes('silchar') ||
+        originQuery.toLowerCase().includes('shillong') || destinationQuery.toLowerCase().includes('shillong') ||
+        originQuery.toLowerCase().includes('kohima') || destinationQuery.toLowerCase().includes('kohima') ||
+        originQuery.toLowerCase().includes('tawang') || destinationQuery.toLowerCase().includes('tawang') ||
+        originQuery.toLowerCase().includes('aizawl') || destinationQuery.toLowerCase().includes('aizawl') ||
+        originQuery.toLowerCase().includes('gangtok') || destinationQuery.toLowerCase().includes('gangtok');
+
+      const hillRiskScore = isHillRoute ? 0.74 : 0.18;
+
+      // =========================================================================
+      // DYNAMIC SPATIAL HAZARD COLLISION FOR ALL 3 ROUTES
+      // =========================================================================
+      const hitsA = getHazardsOnPolyline(directCoords, incidents);
+      const hitsB = getHazardsOnPolyline(bypassCoords, incidents);
+      const hitsC = getHazardsOnPolyline(cCoords, incidents);
+
+      const hasHazardA = hitsA.length > 0;
+      const hasHazardB = hitsB.length > 0;
+      const hasHazardC = hitsC.length > 0;
+      const anyHazardPresent = hasHazardA || hasHazardB || hasHazardC;
+      const primaryBlockedHazard = hitsA[0] || hitsC[0] || hitsB[0] || null;
+
+      // Dynamic Risk Scores
+      const riskScoreA = hasHazardA ? 0.92 : hillRiskScore;
+      const riskScoreB = hasHazardB ? 0.88 : Math.max(0.08, Math.round((hillRiskScore * 0.35) * 100) / 100);
+      const riskScoreC = hasHazardC ? 0.90 : (isWaterwayFeasible ? 0.05 : Math.max(0.12, Math.round((hillRiskScore * 0.45) * 100) / 100));
+
+      const optA = {
+        routeId: 'ROUTE_OPT_A_HIGHWAY',
+        routeName: `Direct Highway via ${directRoute.summary || 'National Highway'}`,
+        strategyType: 'FASTEST',
+        totalDistanceKm: directDist,
+        estimatedHours: hasHazardA ? Math.round((directHours + 3.5) * 10) / 10 : (isHillRoute ? Math.round((directHours + 3.8) * 10) / 10 : directHours),
+        overallRiskScore: riskScoreA,
+        riskTier: hasHazardA ? 'CRITICAL' : (riskScoreA > 0.5 ? 'HIGH' : 'LOW'),
+        isRecommended: !hasHazardA && riskScoreA <= 0.5 && (!hasHazardB || riskScoreA <= riskScoreB),
+        originCoords: activeOriginCoords,
+        destinationCoords: activeDestCoords,
+        originLabel: originQuery,
+        destinationLabel: destinationQuery,
+        snappedCoordinates: directCoords,
+        activeHazard: hasHazardA ? hitsA[0] : null,
+        steps: [
+          { fromHub: originQuery, toHub: destinationQuery, highwayCode: directRoute.summary || 'NH Highway', distanceKm: directDist, riskScore: riskScoreA, status: hasHazardA ? 'BLOCKED' : (riskScoreA > 0.5 ? 'CAUTION' : 'OPEN') }
+        ],
+        explainability: {
+          naturalLanguageSummary: hasHazardA
+            ? `🚨 CRITICAL HAZARD DETECTED: Active verified ${hitsA[0].incidentType || 'Hazard'} (${hitsA[0].description || 'Road Blockage'}) reported near ${hitsA[0].roadSegmentName || 'Corridor Coordinate'} (${Number(hitsA[0].latitude).toFixed(2)}°N, ${Number(hitsA[0].longitude).toFixed(2)}°E). Severe stoppage delay expected.`
+            : (isHillRoute
+              ? `Direct highway traversal over mountain passes. Open-Meteo satellite feed detects active slope saturation near hill passes; moderate stoppage risk expected.`
+              : `Nominal weather and terrain stability across the corridor. Recommended direct transit path for ${commodity}.`),
+        }
+      };
+
+      const optB = {
+        routeId: 'ROUTE_OPT_B_RESILIENT',
+        routeName: optBName,
+        strategyType: 'RESILIENT_BYPASS',
+        totalDistanceKm: bypassDist,
+        estimatedHours: hasHazardB ? Math.round((bypassHours + 3.5) * 10) / 10 : bypassHours,
+        overallRiskScore: riskScoreB,
+        riskTier: hasHazardB ? 'CRITICAL' : (riskScoreB > 0.5 ? 'HIGH' : 'LOW'),
+        isRecommended: !hasHazardB && (hasHazardA || hasHazardC || hillRiskScore > 0.5),
+        originCoords: activeOriginCoords,
+        destinationCoords: activeDestCoords,
+        originLabel: originQuery,
+        destinationLabel: destinationQuery,
+        snappedCoordinates: bypassCoords,
+        activeHazard: hasHazardB ? hitsB[0] : null,
+        steps: [
+          { fromHub: originQuery, toHub: 'Intermediate Logistics Waypoint', highwayCode: 'Regional Link', distanceKm: Math.round(bypassDist * 0.5), riskScore: riskScoreB, status: hasHazardB ? 'BLOCKED' : 'OPEN' },
+          { fromHub: 'Intermediate Logistics Waypoint', toHub: destinationQuery, highwayCode: 'Connected Corridor', distanceKm: Math.round(bypassDist * 0.5), riskScore: 0.10, status: 'OPEN' }
+        ],
+        explainability: {
+          naturalLanguageSummary: hasHazardB
+            ? `🚨 CRITICAL HAZARD ON BYPASS: Active verified ${hitsB[0].incidentType} near ${hitsB[0].roadSegmentName || 'corridor coordinate'}.`
+            : (!hasHazardB && anyHazardPresent
+              ? `🛡️ RECOMMENDED SAFETY BYPASS: Diverts around active on-ground ${primaryBlockedHazard?.incidentType || 'Hazard'} at ${primaryBlockedHazard?.roadSegmentName || 'primary corridor'}, ensuring uninterrupted transit for ${commodity}.`
+              : optBSummary),
+        }
+      };
+
+      let optC;
+      if (isWaterwayFeasible && allowWaterways) {
         optC = {
-          routeId: 'ROUTE_OPT_C_EXPRESSWAY',
-          routeName: `Secondary Freight Arterial via ${cSummary}`,
-          strategyType: 'EXPRESSWAY_BYPASS',
+          routeId: 'ROUTE_OPT_C_WATERWAY',
+          routeName: 'National Waterway-2 River Barge Route (Pandu-Dhubri)',
+          strategyType: 'WATERWAY_NW2',
           totalDistanceKm: cDist,
           estimatedHours: cHours,
-          overallRiskScore: Math.max(0.12, Math.round((hillRiskScore * 0.45) * 100) / 100),
+          overallRiskScore: 0.05,
           riskTier: 'LOW',
           isRecommended: false,
           originCoords: activeOriginCoords,
           destinationCoords: activeDestCoords,
           originLabel: originQuery,
           destinationLabel: destinationQuery,
-          snappedCoordinates: cCoords,
+          snappedCoordinates: waterwayCoords,
+          activeHazard: null,
           steps: [
-            { fromHub: originQuery, toHub: 'Intermodal Freight Hub', highwayCode: cSummary, distanceKm: Math.round(cDist * 0.5), riskScore: 0.12, status: 'OPEN' },
+            { fromHub: 'Pandu Port (Guwahati)', toHub: 'Dhubri River Terminal', highwayCode: 'NW-2 Waterway', distanceKm: 260.0, riskScore: 0.05, status: 'OPEN', transportMode: 'RIVER_BARGE' }
+          ],
+          explainability: {
+            naturalLanguageSummary: `Zero landslide exposure via Brahmaputra river barges. 55% lower logistics carbon footprint for bulk essential supplies.`,
+          }
+        };
+      } else {
+        optC = {
+          routeId: 'ROUTE_OPT_C_EXPRESSWAY',
+          routeName: `Secondary Freight Arterial via ${cSummary}`,
+          strategyType: 'EXPRESSWAY_BYPASS',
+          totalDistanceKm: cDist,
+          estimatedHours: hasHazardC ? Math.round((cHours + 3.5) * 10) / 10 : cHours,
+          overallRiskScore: riskScoreC,
+          riskTier: hasHazardC ? 'CRITICAL' : (riskScoreC > 0.5 ? 'HIGH' : 'LOW'),
+          isRecommended: !hasHazardC && hasHazardA && hasHazardB,
+          originCoords: activeOriginCoords,
+          destinationCoords: activeDestCoords,
+          originLabel: originQuery,
+          destinationLabel: destinationQuery,
+          snappedCoordinates: cCoords,
+          activeHazard: hasHazardC ? hitsC[0] : null,
+          steps: [
+            { fromHub: originQuery, toHub: 'Intermodal Freight Hub', highwayCode: cSummary, distanceKm: Math.round(cDist * 0.5), riskScore: riskScoreC, status: hasHazardC ? 'BLOCKED' : 'OPEN' },
             { fromHub: 'Intermodal Freight Hub', toHub: destinationQuery, highwayCode: 'Arterial Link', distanceKm: Math.round(cDist * 0.5), riskScore: 0.15, status: 'OPEN' }
           ],
           explainability: {
-            naturalLanguageSummary: `High-clearance arterial corridor designed for multi-axle freight convoys avoiding core city bottlenecks.`,
+            naturalLanguageSummary: hasHazardC
+              ? `🚨 CRITICAL HAZARD DETECTED: Active verified ${hitsC[0].incidentType || 'Hazard'} (${hitsC[0].description || 'Road Blockage'}) at ${hitsC[0].roadSegmentName || 'Corridor Coordinate'} (${Number(hitsC[0].latitude).toFixed(2)}°N, ${Number(hitsC[0].longitude).toFixed(2)}°E). Stoppage delay expected.`
+              : (!hasHazardC && anyHazardPresent
+                ? `🛡️ ALTERNATIVE ARTERIAL BYPASS: Bypasses blocked sector (${primaryBlockedHazard?.incidentType || 'Hazard'}), keeping supply vehicles moving.`
+                : `High-clearance arterial corridor designed for multi-axle freight convoys avoiding core city bottlenecks.`),
           }
         };
       }
 
       const options = [optA, optB, optC];
-      const recommended = options.find((o) => o.isRecommended) || options[0];
+      // Automatically choose the safest recommended option
+      const recommended = options.find((o) => o.isRecommended) || options.reduce((min, o) => (o.overallRiskScore < min.overallRiskScore ? o : min), options[0]);
 
       const newRouteResult = {
         origin: originQuery,
@@ -601,6 +661,12 @@ export default function RoutePlanner({
                       : 'bg-[#081328] border-[#14294a] hover:border-teal-400 hover:bg-[#0c1d38]'
                     }`}
                 >
+                  {opt.activeHazard && (
+                    <span className="absolute -top-3 left-4 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-600 text-white shadow-md flex items-center gap-1 animate-pulse">
+                      <AlertTriangle className="w-3 h-3" /> Active Hazard
+                    </span>
+                  )}
+
                   {opt.isRecommended && (
                     <span className="absolute -top-3 right-4 px-3 py-0.5 rounded-full text-[11px] font-bold bg-emerald-400 text-slate-950 shadow-md flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" /> AI Recommended
@@ -708,6 +774,7 @@ export default function RoutePlanner({
           <XaiWaterfallChart
             strategyType={selectedOption.strategyType}
             riskScore={selectedOption.overallRiskScore}
+            activeHazard={selectedOption.activeHazard}
           />
         </div>
       )}

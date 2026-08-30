@@ -78,10 +78,15 @@ function MainApp() {
         const queued = await getQueuedIncidents();
         if (queued && queued.length > 0) {
           const res = await api.batchSyncIncidents(queued);
-          if (res.data?.syncedCount > 0) {
-            setSyncedOfflineCount(res.data.syncedCount);
-            toast.success(`Synced ${res.data.syncedCount} offline incident report(s) with Central GIS Command.`, 'Offline Auto-Sync');
-            await removeSyncedIncidents(queued.map((q) => q.clientOfflineId));
+          const syncedList = Array.isArray(res.data) ? res.data : (res.data?.incidents || []);
+          const count = syncedList.length || (res.data?.syncedCount ?? queued.length);
+
+          // Clear synced items from local IndexedDB so they don't get re-submitted on every reload
+          await removeSyncedIncidents(queued.map((q) => q.clientOfflineId));
+
+          if (count > 0) {
+            setSyncedOfflineCount(count);
+            toast.success(`Synced ${count} offline incident report(s) with Central GIS Command.`, 'Offline Auto-Sync');
             fetchInitialData();
             setTimeout(() => setSyncedOfflineCount(0), 4000);
           }
@@ -194,9 +199,8 @@ function MainApp() {
         {/* Action Controls & Profile Bar */}
         <div className="flex items-center space-x-3">
           {/* Network Status Pill */}
-          <div className={`hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${
-            isOnline ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-rose-950/40 text-rose-300 border-rose-800/40'
-          }`}>
+          <div className={`hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${isOnline ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-rose-950/40 text-rose-300 border-rose-800/40'
+            }`}>
             {isOnline ? <Wifi className="w-3.5 h-3.5 text-emerald-400" /> : <WifiOff className="w-3.5 h-3.5 text-rose-400 animate-pulse" />}
             <span className="text-[11px]">{isOnline ? t('liveTelemetry') : 'OFFLINE MODE (PWA)'}</span>
           </div>
@@ -282,8 +286,8 @@ function MainApp() {
               }
             }}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-xs transition-all duration-150 ${activeTab === 'control_tower'
-                ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+              ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
               }`}
           >
             <Layers className="w-4 h-4 text-sky-400" />
@@ -295,8 +299,8 @@ function MainApp() {
             <button
               onClick={() => setActiveTab('incident_queue')}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-xs transition-all duration-150 ${activeTab === 'incident_queue'
-                  ? 'bg-rose-950/50 border border-rose-500/60 text-rose-300 font-bold shadow-[0_0_15px_rgba(244,63,94,0.15)]'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                ? 'bg-rose-950/50 border border-rose-500/60 text-rose-300 font-bold shadow-[0_0_15px_rgba(244,63,94,0.15)]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
                 }`}
             >
               <FileCheck2 className="w-4 h-4 text-rose-400" />
@@ -309,8 +313,8 @@ function MainApp() {
             <button
               onClick={() => setActiveTab('route_planner')}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-xs transition-all duration-150 ${activeTab === 'route_planner'
-                  ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
                 }`}
             >
               <Navigation className="w-4 h-4 text-sky-400" />
@@ -323,8 +327,8 @@ function MainApp() {
             <button
               onClick={() => setActiveTab('convoys')}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-xs transition-all duration-150 ${activeTab === 'convoys'
-                  ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+                ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
                 }`}
             >
               <Truck className="w-4 h-4 text-sky-400" />
@@ -336,8 +340,8 @@ function MainApp() {
           <button
             onClick={() => setActiveTab('district_heatmap')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-xs transition-all duration-150 ${activeTab === 'district_heatmap'
-                ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
+              ? 'bg-sky-950/50 border border-sky-500/60 text-sky-300 font-bold shadow-[0_0_15px_rgba(56,189,248,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/40'
               }`}
           >
             <Building2 className="w-4 h-4 text-sky-400" />
@@ -399,25 +403,40 @@ function MainApp() {
                 </div>
 
                 {/* 3. Hazard Warning Feed Card -> Jumps to Incident Queue */}
-                <div
-                  onClick={() => setActiveTab('incident_queue')}
-                  className="group cursor-pointer bg-[#081328] p-4 rounded-2xl border border-[#14294a] shadow-lg border-l-4 border-l-amber-400 flex items-center justify-between hover:border-amber-400/80 hover:scale-[1.01] hover:bg-[#0a1832] transition-all"
-                  title="Click to open Incident Review & Hazard Queue"
-                >
-                  <div>
-                    <p className="text-[11px] text-slate-400 uppercase font-semibold tracking-wider flex items-center gap-1">
-                      <span>{t('hazardAlerts')}</span>
-                      <span className="text-amber-400 opacity-0 group-hover:opacity-100 transition text-[10px]">➔</span>
-                    </p>
-                    <h3 className="text-2xl font-bold text-white mt-1 font-display">Caution / Watch</h3>
-                    <p className="text-xs text-amber-400 mt-0.5 font-medium group-hover:underline">
-                      Live Satellite Risk • Review Hazards ➔
-                    </p>
-                  </div>
-                  <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400 border border-amber-500/20 group-hover:bg-amber-500/20 group-hover:scale-110 transition">
-                    <AlertTriangle className="w-6 h-6" />
-                  </div>
-                </div>
+                {(() => {
+                  const activeHazardsCount = incidents.filter((i) => i.verificationStatus === 'VERIFIED' || i.verificationStatus === 'ACTIVE').length;
+                  const hasDisruption = activeHazardsCount > 0;
+
+                  return (
+                    <div
+                      onClick={() => setActiveTab('incident_queue')}
+                      className={`group cursor-pointer bg-[#081328] p-4 rounded-2xl border border-[#14294a] shadow-lg border-l-4 flex items-center justify-between hover:scale-[1.01] hover:bg-[#0a1832] transition-all ${hasDisruption
+                          ? 'border-l-rose-500 hover:border-rose-500/80'
+                          : 'border-l-emerald-400 hover:border-emerald-400/80'
+                        }`}
+                      title="Click to open Incident Review & Hazard Queue"
+                    >
+                      <div>
+                        <p className="text-[11px] text-slate-400 uppercase font-semibold tracking-wider flex items-center gap-1">
+                          <span>{t('hazardAlerts')}</span>
+                          <span className={`${hasDisruption ? 'text-rose-400' : 'text-emerald-400'} opacity-0 group-hover:opacity-100 transition text-[10px]`}>➔</span>
+                        </p>
+                        <h3 className="text-2xl font-bold text-white mt-1 font-display">
+                          {hasDisruption ? `${activeHazardsCount} Active` : 'All Clear (0)'}
+                        </h3>
+                        <p className={`text-xs mt-0.5 font-medium group-hover:underline ${hasDisruption ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {hasDisruption ? 'Disruptions Reported • Review Hazards ➔' : 'All Corridors Open • View Queue ➔'}
+                        </p>
+                      </div>
+                      <div className={`p-3 rounded-xl border transition group-hover:scale-110 ${hasDisruption
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 group-hover:bg-rose-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 group-hover:bg-emerald-500/20'
+                        }`}>
+                        {hasDisruption ? <AlertTriangle className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* 4. Monitored Districts Card -> Jumps to District Heatmap */}
                 <div

@@ -1,18 +1,51 @@
 import React from 'react';
-import { CloudRain, Mountain, ShieldCheck, Activity, TrendingDown, Layers, Sun } from 'lucide-react';
+import { CloudRain, Mountain, ShieldCheck, Activity, AlertTriangle, Layers, Sun } from 'lucide-react';
 
-export default function XaiWaterfallChart({ isHillRoute = true, riskScore = 0.74, strategyType = 'FASTEST' }) {
+export default function XaiWaterfallChart({ isHillRoute = true, riskScore = 0.74, strategyType = 'FASTEST', activeHazard = null }) {
   const isBypass = strategyType === 'RESILIENT_BYPASS';
   const isWaterway = strategyType === 'WATERWAY_NW2';
   const isSafeRoute = riskScore <= 0.35;
 
   let factors = [];
 
-  if (isBypass) {
+  if (activeHazard) {
+    // Dynamic Real-World Hazard Incident Factor Attribution (e.g. Landslide at Baramati / Jowai)
     factors = [
-      { name: 'Valley Incline Stability (Low Slope < 8°)', impact: -45, icon: <Mountain className="w-3.5 h-3.5 text-teal-400" />, type: 'POSITIVE', desc: 'Avoids steep mountain failure planes' },
-      { name: 'Satellite Rain Buffer (Flat Runoff)', impact: -30, icon: <CloudRain className="w-3.5 h-3.5 text-sky-400" />, type: 'POSITIVE', desc: 'Zero saturated mudslide exposure' },
-      { name: 'Detour Distance Overhead (+18%)', impact: +15, icon: <Activity className="w-3.5 h-3.5 text-amber-400" />, type: 'NEGATIVE', desc: 'Additional transit buffer' },
+      {
+        name: `Active On-Ground ${activeHazard.incidentType || 'Hazard'} Blockage (${activeHazard.roadSegmentName || 'Corridor Coordinate'})`,
+        impact: +85,
+        icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />,
+        type: 'NEGATIVE',
+        desc: activeHazard.description || 'Active road blockage verified by Central Command'
+      },
+      {
+        name: 'Corridor Transit Stoppage & Congestion Delay',
+        impact: +30,
+        icon: <Activity className="w-3.5 h-3.5 text-rose-400" />,
+        type: 'NEGATIVE',
+        desc: 'Heavy vehicle queuing and clearance backlog'
+      },
+      {
+        name: 'Disaster Relief & PWD Teams Dispatched',
+        impact: -15,
+        icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />,
+        type: 'POSITIVE',
+        desc: 'Clearance machinery deployed on ground'
+      },
+      {
+        name: 'Engineered Road Foundation',
+        impact: -8,
+        icon: <Mountain className="w-3.5 h-3.5 text-teal-400" />,
+        type: 'POSITIVE',
+        desc: 'Underlying asphalt subgrade structure stable'
+      },
+    ];
+  } else if (isBypass) {
+    factors = [
+      { name: 'Active Sector Blockage Bypassed', impact: -55, icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />, type: 'POSITIVE', desc: 'Diverts around active ground landslide / hazard sector' },
+      { name: 'Valley Incline Stability (Low Slope < 8°)', impact: -30, icon: <Mountain className="w-3.5 h-3.5 text-teal-400" />, type: 'POSITIVE', desc: 'Avoids steep mountain failure planes' },
+      { name: 'Satellite Rain Buffer (Flat Runoff)', impact: -20, icon: <CloudRain className="w-3.5 h-3.5 text-sky-400" />, type: 'POSITIVE', desc: 'Zero saturated mudslide exposure' },
+      { name: 'Detour Distance Overhead (+12%)', impact: +15, icon: <Activity className="w-3.5 h-3.5 text-amber-400" />, type: 'NEGATIVE', desc: 'Additional transit buffer' },
     ];
   } else if (isWaterway) {
     factors = [

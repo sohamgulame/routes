@@ -44,6 +44,12 @@ export default function IncidentVerificationQueue({ onIncidentResolved }) {
       if (status === 'REJECTED') notes = 'Dismissed upon field inspection.';
       if (status === 'RESOLVED') notes = 'Road debris cleared and corridor restored to OPEN transit by PWD crews.';
 
+      // Optimistically update UI
+      setRecentHazards((prev) =>
+        prev.map((inc) => (inc.id === id ? { ...inc, verificationStatus: status } : inc))
+      );
+      setPendingIncidents((prev) => prev.filter((inc) => inc.id !== id));
+
       await api.verifyIncident(id, status, notes);
 
       if (status === 'RESOLVED') {
@@ -59,6 +65,7 @@ export default function IncidentVerificationQueue({ onIncidentResolved }) {
     } catch (e) {
       console.error('Error updating incident status:', e);
       toast.error('Failed to update incident status. Ensure you have Officer permissions.', 'Action Failed');
+      await fetchIncidents();
     } finally {
       setActionInProgress(null);
     }
