@@ -50,26 +50,34 @@ public class WeatherIntegrationService {
                 List<Double> rain = (List<Double>) hourly.get("precipitation");
                 List<Double> soil = (List<Double>) hourly.get("soil_moisture_0_to_1cm");
 
-                double currentTemp = (temps != null && !temps.isEmpty()) ? temps.get(temps.size() - 1) : 22.0;
+                int currentHour = java.time.LocalTime.now().getHour();
+                int currentHourIdx = 48 + currentHour; // 48 hours of past days offset
+                if (temps != null && currentHourIdx >= temps.size()) {
+                    currentHourIdx = temps.size() - 1;
+                }
 
-                // Sum rainfall in past 24h & 48h
+                double currentTemp = (temps != null && !temps.isEmpty() && currentHourIdx < temps.size() && temps.get(currentHourIdx) != null)
+                        ? temps.get(currentHourIdx)
+                        : (temps != null && !temps.isEmpty() ? temps.get(0) : 22.0);
+
+                // Sum rainfall in actual past 24h & 48h leading up to current hour
                 double rain24 = 0.0;
                 double rain48 = 0.0;
                 if (rain != null && !rain.isEmpty()) {
-                    int size = rain.size();
-                    int start24 = Math.max(0, size - 24);
-                    int start48 = Math.max(0, size - 48);
+                    int endIdx = Math.min(rain.size(), currentHourIdx + 1);
+                    int start24 = Math.max(0, endIdx - 24);
+                    int start48 = Math.max(0, endIdx - 48);
 
-                    for (int i = start24; i < size; i++) {
+                    for (int i = start24; i < endIdx; i++) {
                         if (rain.get(i) != null) rain24 += rain.get(i);
                     }
-                    for (int i = start48; i < size; i++) {
+                    for (int i = start48; i < endIdx; i++) {
                         if (rain.get(i) != null) rain48 += rain.get(i);
                     }
                 }
 
-                double soilMoisture = (soil != null && !soil.isEmpty() && soil.get(soil.size() - 1) != null)
-                        ? soil.get(soil.size() - 1)
+                double soilMoisture = (soil != null && !soil.isEmpty() && currentHourIdx < soil.size() && soil.get(currentHourIdx) != null)
+                        ? soil.get(currentHourIdx)
                         : 0.35;
 
                 return new RealWeatherMetrics(

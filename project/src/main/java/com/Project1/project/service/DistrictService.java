@@ -28,13 +28,13 @@ public class DistrictService {
         this.incidentReportRepository = incidentReportRepository;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<DistrictDto> getAllDistricts() {
         List<District> districts = districtRepository.findAll();
         List<RoadSegment> roadSegments = roadSegmentRepository.findAll();
         List<IncidentReport> activeIncidents = incidentReportRepository.findRecentIncidents();
 
-        for (District district : districts) {
+        return districts.stream().map(district -> {
             double baseRisk = 0.05;
             int incidentCount = 0;
 
@@ -42,17 +42,19 @@ public class DistrictService {
             if (district.getHqLatitude() != null && district.getHqLongitude() != null) {
                 for (IncidentReport inc : activeIncidents) {
                     if ("VERIFIED".equals(inc.getVerificationStatus()) || "PENDING".equals(inc.getVerificationStatus())) {
-                        double lat = inc.getLatitude();
-                        double lng = inc.getLongitude();
-                        double dist = Math.sqrt(Math.pow(lat - district.getHqLatitude(), 2) + Math.pow(lng - district.getHqLongitude(), 2));
-                        if (dist < 0.45) { // ~45 km
-                            incidentCount++;
-                            if ("CRITICAL".equals(inc.getSeverity())) {
-                                baseRisk += 0.35;
-                            } else if ("MAJOR".equals(inc.getSeverity())) {
-                                baseRisk += 0.20;
-                            } else {
-                                baseRisk += 0.10;
+                        if (inc.getLatitude() != null && inc.getLongitude() != null) {
+                            double lat = inc.getLatitude();
+                            double lng = inc.getLongitude();
+                            double dist = Math.sqrt(Math.pow(lat - district.getHqLatitude(), 2) + Math.pow(lng - district.getHqLongitude(), 2));
+                            if (dist < 0.45) { // ~45 km
+                                incidentCount++;
+                                if ("CRITICAL".equalsIgnoreCase(inc.getSeverity())) {
+                                    baseRisk += 0.35;
+                                } else if ("HIGH".equalsIgnoreCase(inc.getSeverity()) || "MAJOR".equalsIgnoreCase(inc.getSeverity())) {
+                                    baseRisk += 0.20;
+                                } else {
+                                    baseRisk += 0.10;
+                                }
                             }
                         }
                     }
@@ -68,9 +70,9 @@ public class DistrictService {
                     double dist = Math.sqrt(Math.pow(roadLat - district.getHqLatitude(), 2) + 
                                             Math.pow(roadLng - district.getHqLongitude(), 2));
                     if (dist < 0.6) {
-                        if ("BLOCKED".equals(road.getCurrentStatus())) {
+                        if ("BLOCKED".equalsIgnoreCase(road.getCurrentStatus())) {
                             baseRisk += 0.40;
-                        } else if ("CAUTION".equals(road.getCurrentStatus()) || (road.getCurrentRiskScore() != null && road.getCurrentRiskScore() > 0.6)) {
+                        } else if ("CAUTION".equalsIgnoreCase(road.getCurrentStatus()) || (road.getCurrentRiskScore() != null && road.getCurrentRiskScore() > 0.6)) {
                             baseRisk += 0.20;
                         }
                     }
@@ -87,20 +89,27 @@ public class DistrictService {
             }
 
             double finalScore = Math.min(0.98, Math.round(baseRisk * 100.0) / 100.0);
-            district.setCriticalityScore(finalScore);
-            district.setActiveIncidentsCount(incidentCount);
-
+            String status;
             if (finalScore >= 0.70) {
-                district.setConnectivityStatus("ISOLATED");
+                status = "ISOLATED";
             } else if (finalScore >= 0.35) {
-                district.setConnectivityStatus("RESTRICTED");
+                status = "RESTRICTED";
             } else {
-                district.setConnectivityStatus("NORMAL");
+                status = "NORMAL";
             }
-            districtRepository.save(district);
-        }
 
-        return districts.stream().map(this::mapToDto).collect(Collectors.toList());
+            return new DistrictDto(
+                    district.getId(),
+                    district.getName(),
+                    district.getState(),
+                    district.getHqLatitude(),
+                    district.getHqLongitude(),
+                    status,
+                    finalScore,
+                    incidentCount,
+                    district.getUpdatedAt() != null ? district.getUpdatedAt().toString() : null
+            );
+        }).collect(Collectors.toList());
     }
 
     public List<DistrictDto> getDistrictsByState(String state) {

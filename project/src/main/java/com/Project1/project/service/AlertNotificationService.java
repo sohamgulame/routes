@@ -135,7 +135,7 @@ public class AlertNotificationService {
                     request.recommendedBypass() != null ? request.recommendedBypass() : "Dabaka-Lumding Valley Bypass",
                     LocalDateTime.now().toString()
             );
-            messagingTemplate.convertAndSend("/topic/disruptions", wsAlert);
+            messagingTemplate.convertAndSend("/topic/alerts/disruptions", wsAlert);
         }
 
         List<String> convoyTags = targetedConvoys.stream()

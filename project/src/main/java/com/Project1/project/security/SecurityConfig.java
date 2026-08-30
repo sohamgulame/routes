@@ -61,6 +61,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/routes/calculate").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/incidents/recent").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/incidents/report").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/incidents/batch-sync").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/alerts/history").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/convoys/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/convoys/telemetry").permitAll()
                         .requestMatchers("/api/v1/ewaybills/**").permitAll()

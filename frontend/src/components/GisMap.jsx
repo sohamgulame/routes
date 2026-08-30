@@ -453,9 +453,12 @@ export default function GisMap({
     return chunks;
   };
 
+  const isViewingSelectedRoute = Boolean((selectedRoute || customRouteCoords) && !focusedConvoyId);
   const selectedPolyline = (selectedConvoyId && convoyRoutes[selectedConvoyId]?.polyline) || (Object.values(convoyRoutes)[0]?.polyline) || null;
-  const activeRoutePolyline = customRouteCoords || osrmRouteCoords || selectedPolyline;
-  const focusedConvoy = convoys.find((c) => (c.id || c.convoyId) === selectedConvoyId) || (convoys.length > 0 ? convoys[0] : null);
+  const activeRoutePolyline = (isViewingSelectedRoute ? customRouteCoords : null) || osrmRouteCoords || selectedPolyline;
+  const focusedConvoy = focusedConvoyId
+    ? convoys.find((c) => (c.id || c.convoyId) === focusedConvoyId)
+    : (!isViewingSelectedRoute && convoys.length > 0 ? convoys[0] : null);
 
   const [isAutoFollowing, setIsAutoFollowing] = useState(true);
 
@@ -463,12 +466,14 @@ export default function GisMap({
   useEffect(() => {
     if (focusedConvoyId) {
       setIsAutoFollowing(true);
+    } else if (isViewingSelectedRoute) {
+      setIsAutoFollowing(false);
     }
-  }, [focusedConvoyId]);
+  }, [focusedConvoyId, isViewingSelectedRoute]);
 
   // Compute live coordinates of the focused truck
   let focusedTruckCoords = null;
-  if (focusedConvoy) {
+  if (focusedConvoy && !isViewingSelectedRoute) {
     const convoyKey = focusedConvoy.convoyId || focusedConvoy.id;
     const rData = convoyRoutes[convoyKey];
     if (rData && rData.polyline && rData.polyline.length > 0) {
@@ -629,8 +634,8 @@ export default function GisMap({
           />
         )}
 
-        {/* ON-DEMAND SELECTED ROUTE: Google Maps-Style Traffic-Coded Road Polyline (Only rendered when no convoy is currently active/focused to prevent duplicates) */}
-        {!focusedConvoy && activeRoutePolyline && activeRoutePolyline.length > 1 && (() => {
+        {/* ON-DEMAND SELECTED ROUTE: Google Maps-Style Traffic-Coded Road Polyline */}
+        {(isViewingSelectedRoute || !focusedConvoy) && activeRoutePolyline && activeRoutePolyline.length > 1 && (() => {
           if (!showTraffic) {
             return (
               <Polyline

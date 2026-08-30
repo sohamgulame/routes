@@ -23,4 +23,7 @@ public interface RoadSegmentRepository extends JpaRepository<RoadSegment, String
 
     @Query(value = "SELECT * FROM road_segments ORDER BY current_risk_score DESC", nativeQuery = true)
     List<RoadSegment> findAllOrderedByRisk();
+
+    @Query(value = "SELECT * FROM road_segments ORDER BY ST_Distance(segment_geom, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)) ASC LIMIT 1", nativeQuery = true)
+    RoadSegment findNearestSegment(@Param("lat") Double lat, @Param("lng") Double lng);
 }

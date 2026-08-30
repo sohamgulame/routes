@@ -56,13 +56,24 @@ public class IncidentReportService {
         }
 
         RoadSegment segment = null;
-        if (req.roadSegmentId() != null) {
+        if (req.roadSegmentId() != null && !req.roadSegmentId().isBlank()) {
             segment = roadSegmentRepository.findById(req.roadSegmentId()).orElse(null);
+        }
+        if (segment == null && req.latitude() != null && req.longitude() != null) {
+            try {
+                segment = roadSegmentRepository.findNearestSegment(req.latitude(), req.longitude());
+            } catch (Exception e) {
+                // Ignore fallback error
+            }
         }
 
         Point geom = geometryFactory.createPoint(new Coordinate(req.longitude(), req.latitude()));
 
-        boolean isOfficial = reporter != null && (reporter.getRole().equals("ROLE_FIELD_ENGINEER") || reporter.getRole().equals("ROLE_ADMIN"));
+        boolean isOfficial = reporter != null && (
+                "ROLE_FIELD_ENGINEER".equals(reporter.getRole()) ||
+                "ROLE_DISASTER_OFFICER".equals(reporter.getRole()) ||
+                "ROLE_ADMIN".equals(reporter.getRole())
+        );
         String verificationStatus = isOfficial ? "VERIFIED" : "PENDING";
 
         IncidentReport incident = new IncidentReport(
@@ -86,7 +97,7 @@ public class IncidentReportService {
 
         IncidentReport saved = incidentReportRepository.save(incident);
 
-        if (isOfficial && segment != null && req.severity().equals("CRITICAL")) {
+        if (isOfficial && segment != null && "CRITICAL".equalsIgnoreCase(req.severity())) {
             segment.setCurrentStatus("BLOCKED");
             segment.setDisruptionReason("Active " + req.incidentType() + " reported: " + req.description());
             segment.setCurrentRiskScore(0.95);

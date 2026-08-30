@@ -91,10 +91,13 @@ export default function CreateConvoyModal({ isOpen, onClose, onConvoyCreated, in
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      let finalOriginLat = originCoords?.lat || (originCoords ? originCoords[0] : null);
-      let finalOriginLng = originCoords?.lng || (originCoords ? originCoords[1] : null);
 
+    let finalOriginLat = originCoords?.lat || (originCoords ? originCoords[0] : null);
+    let finalOriginLng = originCoords?.lng || (originCoords ? originCoords[1] : null);
+    let finalDestLat = destCoords?.lat || (destCoords ? destCoords[0] : null);
+    let finalDestLng = destCoords?.lng || (destCoords ? destCoords[1] : null);
+
+    try {
       if (!finalOriginLat && originCity && originCity.trim().length >= 2) {
         const geoRes = await searchLocations(originCity);
         if (geoRes && geoRes.length > 0) {
@@ -102,9 +105,6 @@ export default function CreateConvoyModal({ isOpen, onClose, onConvoyCreated, in
           finalOriginLng = geoRes[0].lng;
         }
       }
-
-      let finalDestLat = destCoords?.lat || (destCoords ? destCoords[0] : null);
-      let finalDestLng = destCoords?.lng || (destCoords ? destCoords[1] : null);
 
       if (!finalDestLat && destinationCity && destinationCity.trim().length >= 2) {
         const geoRes = await searchLocations(destinationCity);
