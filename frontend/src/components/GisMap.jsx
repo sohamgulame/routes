@@ -155,8 +155,31 @@ export default function GisMap({
   const center = [25.85, 92.4];
   const [mapLayer, setMapLayer] = useState('osm');
   const [showTraffic, setShowTraffic] = useState(true);
+  const [showRainRadar, setShowRainRadar] = useState(true);
+  const [radarPath, setRadarPath] = useState('');
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [osrmRouteCoords, setOsrmRouteCoords] = useState([]);
+
+  // Fetch real-time RainViewer satellite precipitation radar timestamp
+  useEffect(() => {
+    const fetchRadar = async () => {
+      try {
+        const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.radar?.past && data.radar.past.length > 0) {
+            const latest = data.radar.past[data.radar.past.length - 1];
+            setRadarPath(latest.path);
+          }
+        }
+      } catch (e) {
+        console.warn('RainViewer radar fetch fallback:', e);
+      }
+    };
+    fetchRadar();
+    const interval = setInterval(fetchRadar, 300000); // Poll fresh radar every 5 mins
+    return () => clearInterval(interval);
+  }, []);
 
   const tileUrls = {
     osm: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -501,7 +524,7 @@ export default function GisMap({
         </div>
       )}
 
-      {/* Map Layer Switcher & Traffic Toggle (Top-Right) */}
+      {/* Map Layer Switcher, Live Traffic & Satellite Rain Radar Toggle (Top-Right) */}
       <div className="absolute top-3 right-3 z-[500] flex space-x-1.5 bg-[#061024]/90 backdrop-blur-md p-1.5 rounded-xl border border-[#14294a] pointer-events-auto shadow-xl">
         <button
           onClick={() => setShowTraffic(!showTraffic)}
@@ -513,6 +536,18 @@ export default function GisMap({
         >
           <span className={showTraffic ? 'animate-pulse' : ''}>🚦</span>
           <span>Live Traffic {showTraffic ? 'ON' : 'OFF'}</span>
+        </button>
+
+        <button
+          onClick={() => setShowRainRadar(!showRainRadar)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 border ${showRainRadar
+              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
+              : 'bg-transparent text-slate-400 border-transparent hover:text-white'
+            }`}
+          title="Toggle Real-Time Satellite Rain Radar & Cloudburst Layer"
+        >
+          <span className={showRainRadar ? 'animate-pulse' : ''}>🌧️</span>
+          <span>Rain Radar {showRainRadar ? 'ON' : 'OFF'}</span>
         </button>
 
         <div className="w-[1px] bg-[#14294a] my-1" />
@@ -566,9 +601,20 @@ export default function GisMap({
         <TileLayer
           key={mapLayer}
           url={tileUrls[mapLayer]}
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | TomTom Live Traffic & OSRM Routing'
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | TomTom Live Traffic & RainViewer Weather Radar'
           maxZoom={19}
         />
+
+        {/* Real-Time Satellite Precipitation & Cloudburst Radar Overlay */}
+        {showRainRadar && radarPath && (
+          <TileLayer
+            key={`radar-${radarPath}`}
+            url={`https://tilecache.rainviewer.com${radarPath}/256/{z}/{x}/{y}/2/1_1.png`}
+            opacity={0.68}
+            maxZoom={19}
+            zIndex={350}
+          />
+        )}
 
         {/* TomTom Official Real-Time Satellite Traffic Flow Heatmap Overlay */}
         {showTraffic && (
@@ -973,7 +1019,17 @@ export default function GisMap({
                 <span className="w-3 h-1.5 rounded bg-cyan-500"></span>
                 <span className="text-slate-300">Waterway Port</span>
               </div>
-              <div className="flex items-center space-x-2 pt-1.5 border-t border-[#14294a]">
+              <div className="pt-1.5 border-t border-[#14294a] space-y-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase">🌧️ Rain Radar Intensity:</span>
+                <div className="flex items-center justify-between text-[10px] text-slate-300 font-mono">
+                  <span className="text-sky-400">Light</span>
+                  <span className="text-emerald-400">Moderate</span>
+                  <span className="text-amber-400">Heavy</span>
+                  <span className="text-rose-400 font-bold">Cloudburst</span>
+                </div>
+                <div className="h-1.5 rounded-full w-full bg-gradient-to-r from-sky-400 via-emerald-400 via-amber-400 to-rose-500" />
+              </div>
+              <div className="flex items-center space-x-2 pt-1 border-t border-[#14294a]">
                 <span className="text-sky-400 font-bold">🚚 Dispatched Fleet ({convoys.length})</span>
               </div>
             </div>
