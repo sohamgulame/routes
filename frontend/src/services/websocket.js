@@ -12,8 +12,9 @@ class WebSocketService {
   connect() {
     if (this.client && this.isConnected) return;
 
+    const wsUrl = import.meta.env.VITE_WS_URL || (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:8080/ws-telemetry' : '/ws-telemetry');
     this.client = new Client({
-      webSocketFactory: () => new SockJS('http://localhost:8080/ws-telemetry'),
+      webSocketFactory: () => new SockJS(wsUrl),
       reconnectDelay: 5000,
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
