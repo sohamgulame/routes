@@ -811,6 +811,8 @@ export default function RoutePlanner({
             estimatedHours={selectedOption.estimatedHours}
             routeName={selectedOption.routeName}
             isHillRoute={selectedOption.overallRiskScore > 0.4 && !selectedOption.activeHazard}
+            shapFactors={selectedOption.shapFactors || selectedOption.explainability?.shapFactors}
+            plainLanguageJustification={selectedOption.explainability?.plainLanguageJustification}
           />
         </div>
       )}
