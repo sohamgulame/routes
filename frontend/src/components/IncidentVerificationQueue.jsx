@@ -71,8 +71,8 @@ export default function IncidentVerificationQueue({ onIncidentResolved }) {
     }
   };
 
-  const activeVerifiedHazards = recentHazards.filter(
-    (h) => h.verificationStatus === 'VERIFIED' || h.verificationStatus === 'ACTIVE'
+  const activeVerifiedHazards = (recentHazards || []).filter(
+    (h) => h && (h.verificationStatus === 'VERIFIED' || h.verificationStatus === 'ACTIVE')
   );
 
   return (
@@ -272,28 +272,40 @@ export default function IncidentVerificationQueue({ onIncidentResolved }) {
 
                           <td className="py-4 px-3 max-w-xs">
                             <p className="text-slate-300 truncate" title={cleanDesc}>{cleanDesc}</p>
+                            {inc.photoUrl && (
+                              <a
+                                href={inc.photoUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] text-teal-400 hover:underline font-semibold flex items-center gap-1 mt-1"
+                              >
+                                <span>📷</span>
+                                <span>View Ground Photo Proof</span>
+                              </a>
+                            )}
                           </td>
 
-                        <td className="py-4 px-3 text-right space-x-2">
-                          <button
-                            onClick={() => handleAction(inc.id, 'VERIFIED')}
-                            disabled={actionInProgress === inc.id}
-                            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold rounded-lg text-xs transition"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Approve & Block</span>
-                          </button>
-                          <button
-                            onClick={() => handleAction(inc.id, 'REJECTED')}
-                            disabled={actionInProgress === inc.id}
-                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#050c1a] hover:bg-[#101f36] text-slate-400 hover:text-rose-400 border border-[#14294a] rounded-lg text-xs transition"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            <span>Dismiss</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="py-4 px-3 text-right space-x-2">
+                            <button
+                              onClick={() => handleAction(inc.id, 'VERIFIED')}
+                              disabled={actionInProgress === inc.id}
+                              className="inline-flex items-center space-x-1 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold rounded-lg text-xs transition"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Approve & Block</span>
+                            </button>
+                            <button
+                              onClick={() => handleAction(inc.id, 'REJECTED')}
+                              disabled={actionInProgress === inc.id}
+                              className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#050c1a] hover:bg-[#101f36] text-slate-400 hover:text-rose-400 border border-[#14294a] rounded-lg text-xs transition"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Dismiss</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
