@@ -154,8 +154,8 @@ export default function GisMap({
 }) {
   const center = [25.85, 92.4];
   const [mapLayer, setMapLayer] = useState('osm');
-  const [showTraffic, setShowTraffic] = useState(true);
-  const [showRainRadar, setShowRainRadar] = useState(true);
+  const [showTraffic, setShowTraffic] = useState(false);
+  const [showRainRadar, setShowRainRadar] = useState(false);
   const [radarPath, setRadarPath] = useState('');
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [osrmRouteCoords, setOsrmRouteCoords] = useState([]);
