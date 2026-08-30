@@ -63,7 +63,7 @@ function MapViewController({
         map.flyTo(mapFocusTarget.coords, mapFocusTarget.zoom || 12, { duration: 1.5 });
         map.invalidateSize();
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [mapFocusTarget, map]);
 
   // Invalidate Leaflet canvas size on mount and on visibility change to prevent gray tile areas
@@ -73,7 +73,7 @@ function MapViewController({
         if (map && map.getContainer() && map.getContainer().offsetParent !== null) {
           map.invalidateSize();
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     handleResize();
@@ -104,7 +104,7 @@ function MapViewController({
           map.invalidateSize();
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [map, center, zoom, focusedTruckCoords, customRouteCoords]);
 
   // Fly directly to vehicle when selected/viewed
@@ -122,7 +122,7 @@ function MapViewController({
           map.invalidateSize();
         }
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [focusedConvoyId, focusedTruckCoords, map]);
 
   // Real-time camera auto-follow: pan smoothly with moving vehicle (only if map is visible)
@@ -131,7 +131,7 @@ function MapViewController({
       if (isAutoFollowing && focusedTruckCoords && map && map.getContainer() && map.getContainer().offsetParent !== null) {
         map.panTo(focusedTruckCoords, { animate: true, duration: 1.5 });
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [focusedTruckCoords, isAutoFollowing, map]);
 
   return null;
@@ -207,7 +207,7 @@ export default function GisMap({
               customPolyline = parsed;
             }
           }
-        } catch (e) {}
+        } catch (e) { }
 
         if (customPolyline) {
           setConvoyRoutes((prev) => ({
@@ -361,7 +361,7 @@ export default function GisMap({
         if (changed) {
           try {
             sessionStorage.setItem('aura_convoy_step_indices', JSON.stringify(updated));
-          } catch (e) {}
+          } catch (e) { }
           return updated;
         }
         return prev;
@@ -391,7 +391,7 @@ export default function GisMap({
         if (changed) {
           try {
             sessionStorage.setItem('aura_convoy_step_indices', JSON.stringify(next));
-          } catch (e) {}
+          } catch (e) { }
         }
         return next;
       });
@@ -529,8 +529,8 @@ export default function GisMap({
         <button
           onClick={() => setShowTraffic(!showTraffic)}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 border ${showTraffic
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
-              : 'bg-transparent text-slate-400 border-transparent hover:text-white'
+            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
+            : 'bg-transparent text-slate-400 border-transparent hover:text-white'
             }`}
           title="Toggle Real-Time Corridor Traffic Flow Layer"
         >
@@ -541,8 +541,8 @@ export default function GisMap({
         <button
           onClick={() => setShowRainRadar(!showRainRadar)}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 border ${showRainRadar
-              ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
-              : 'bg-transparent text-slate-400 border-transparent hover:text-white'
+            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm'
+            : 'bg-transparent text-slate-400 border-transparent hover:text-white'
             }`}
           title="Toggle Real-Time Satellite Rain Radar & Cloudburst Layer"
         >

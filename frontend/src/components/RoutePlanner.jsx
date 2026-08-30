@@ -201,16 +201,25 @@ export default function RoutePlanner({
       const dLat = activeDestCoords[0] - activeOriginCoords[0];
       const dLng = activeDestCoords[1] - activeOriginCoords[1];
       const distDeg = Math.sqrt(dLat * dLat + dLng * dLng) || 0.05;
-      const adaptiveOffsetKm = Math.max(5.0, Math.min(25.0, directDist * 0.15));
+      
+      // Proportional lateral offset calibrated to guarantee distinct physical road corridors across any distance
+      const adaptiveOffsetKm = Math.max(8.0, Math.min(85.0, directDist * 0.22));
       const scaleDeg = adaptiveOffsetKm / 111.0;
 
-      // Helper to check if two polylines are physically separate
+      // Multi-point physical path divergence checker
       const isDistinctPath = (p1, p2) => {
-        if (!p1 || !p2 || p1.length < 3 || p2.length < 3) return false;
-        const m1 = p1[Math.floor(p1.length / 2)];
-        const m2 = p2[Math.floor(p2.length / 2)];
-        const diff = Math.sqrt(Math.pow(m1[0] - m2[0], 2) + Math.pow(m1[1] - m2[1], 2));
-        return diff > 0.015; // At least ~1.7 km divergence at midpoint
+        if (!p1 || !p2 || p1.length < 5 || p2.length < 5) return false;
+        const sampleFractions = [0.25, 0.4, 0.5, 0.6, 0.75];
+        let maxDeviation = 0;
+        for (const frac of sampleFractions) {
+          const m1 = p1[Math.floor(p1.length * frac)];
+          const m2 = p2[Math.floor(p2.length * frac)];
+          if (m1 && m2) {
+            const diff = Math.sqrt(Math.pow(m1[0] - m2[0], 2) + Math.pow(m1[1] - m2[1], 2));
+            if (diff > maxDeviation) maxDeviation = diff;
+          }
+        }
+        return maxDeviation > 0.045; // At least ~5 km physical separation along the corridor
       };
 
       // =========================================================================
