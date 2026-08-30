@@ -610,8 +610,11 @@ export default function GisMap({
           <TileLayer
             key={`radar-${radarPath}`}
             url={`https://tilecache.rainviewer.com${radarPath}/256/{z}/{x}/{y}/2/1_1.png`}
-            opacity={0.68}
+            opacity={0.65}
+            maxNativeZoom={12}
+            minNativeZoom={2}
             maxZoom={19}
+            tileSize={256}
             zIndex={350}
           />
         )}
