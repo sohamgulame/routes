@@ -1,15 +1,95 @@
-import React, { useState } from 'react';
-import { Truck, Thermometer, Download, Plus, Trash2, CheckCircle, AlertCircle, Navigation } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Truck, Thermometer, Download, Plus, Trash2, CheckCircle, AlertCircle, Navigation, Radio } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import CreateConvoyModal from './CreateConvoyModal';
 
-export default function ConvoyTracker({ convoys = [], onConvoyAdded, onConvoyDeleted, onViewOnMap }) {
+export default function ConvoyTracker({ convoys = [], onConvoyAdded, onConvoyDeleted, onConvoyUpdated, onViewOnMap }) {
   const { isTransporter, isAdmin } = useAuth();
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [streamingConvoyId, setStreamingConvoyId] = useState(null);
+  const watchIdRef = useRef(null);
+
+  // Stop device GPS watch on component unmount
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  const handleToggleGpsStreaming = (convoy) => {
+    const cId = convoy.id || convoy.convoyId;
+
+    if (streamingConvoyId === cId) {
+      if (watchIdRef.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      setStreamingConvoyId(null);
+      toast.info(`Stopped device GPS streaming for [${convoy.vehicleNumber}]. Resumed standard telemetry.`, 'GPS Stream Stopped');
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      toast.error('Geolocation API is not supported by your browser.', 'GPS Error');
+      return;
+    }
+
+    // Stop any previously active watch
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+    }
+
+    toast.info(`Requesting laptop/phone location permission for [${convoy.vehicleNumber}]...`, 'Acquiring GPS');
+
+    const wid = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const { latitude, longitude, speed, heading, altitude } = pos.coords;
+        const speedKmh = speed != null && !isNaN(speed) && speed > 0 ? Math.round(speed * 3.6) : 52.0;
+        const headingDeg = heading != null && !isNaN(heading) ? heading : 0.0;
+        const altitudeM = altitude != null && !isNaN(altitude) ? altitude : 120.0;
+
+        // Transmit live telemetry ping to Spring Boot & PostGIS backend
+        try {
+          await api.pingTelemetry({
+            convoyId: cId,
+            latitude,
+            longitude,
+            speedKmh,
+            headingDeg,
+            altitudeM,
+            temperatureCelsius: convoy.temperatureCelsius ?? 4.0,
+          });
+        } catch (err) {
+          // Graceful fallback for offline local mode
+        }
+
+        // Notify parent state for instant UI and map update
+        onConvoyUpdated?.({
+          ...convoy,
+          currentLatitude: latitude,
+          currentLongitude: longitude,
+          speedKmh,
+          isLiveStreaming: true,
+        });
+      },
+      (err) => {
+        console.warn('Device GPS streaming error:', err);
+        toast.error(`GPS Error: ${err.message}. Please allow location permission in your browser.`, 'GPS Permission Required');
+        setStreamingConvoyId(null);
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+    );
+
+    watchIdRef.current = wid;
+    setStreamingConvoyId(cId);
+    toast.success(`Broadcasting live device GPS for vehicle [${convoy.vehicleNumber}]!`, '📡 Device GPS Active');
+  };
 
   const handleDownloadEwaybill = (convoyId) => {
     toast.info('Generating verified e-Waybill manifest PDF...', 'e-Waybill Export');
@@ -19,6 +99,11 @@ export default function ConvoyTracker({ convoys = [], onConvoyAdded, onConvoyDel
   const handleDeleteConvoy = async (convoyId, vehicleNumber) => {
     if (!window.confirm(`Are you sure you want to remove convoy [${vehicleNumber}] from the live tracking fleet?`)) {
       return;
+    }
+
+    if (streamingConvoyId === convoyId && watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      setStreamingConvoyId(null);
     }
 
     setDeletingId(convoyId);
@@ -180,9 +265,22 @@ export default function ConvoyTracker({ convoys = [], onConvoyAdded, onConvoyDel
                       <td className="py-4 px-3 text-right">
                         <div className="inline-flex items-center space-x-2">
                           <button
+                            onClick={() => handleToggleGpsStreaming(convoy)}
+                            title={streamingConvoyId === convoyId ? "Stop streaming device GPS" : "Stream live laptop/phone GPS for this convoy (Driver Mode)"}
+                            className={`inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition shadow-sm cursor-pointer ${
+                              streamingConvoyId === convoyId
+                                ? 'bg-rose-500/20 text-rose-300 border-rose-500/50 animate-pulse'
+                                : 'bg-[#050c1a] hover:bg-[#0f2347] text-teal-300 border-[#14294a]'
+                            }`}
+                          >
+                            <Radio className={`w-3.5 h-3.5 ${streamingConvoyId === convoyId ? 'text-rose-400 animate-spin' : 'text-teal-400'}`} />
+                            <span>{streamingConvoyId === convoyId ? '🔴 Live GPS' : '📡 Stream GPS'}</span>
+                          </button>
+
+                          <button
                             onClick={() => onViewOnMap?.(convoy)}
                             title="Focus & View on GIS Control Tower Map"
-                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#032742] hover:bg-[#0284c7] text-sky-300 hover:text-white rounded-lg text-xs font-semibold border border-sky-500/40 transition shadow-sm"
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#032742] hover:bg-[#0284c7] text-sky-300 hover:text-white rounded-lg text-xs font-semibold border border-sky-500/40 transition shadow-sm cursor-pointer"
                           >
                             <Navigation className="w-3.5 h-3.5" />
                             <span>View</span>
@@ -191,7 +289,7 @@ export default function ConvoyTracker({ convoys = [], onConvoyAdded, onConvoyDel
                           <button
                             onClick={() => handleDownloadEwaybill(convoyId)}
                             title="Download e-Waybill Manifest PDF"
-                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#050c1a] hover:bg-[#0f2347] rounded-lg text-xs font-semibold text-slate-300 border border-[#14294a] transition shadow-sm"
+                            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-[#050c1a] hover:bg-[#0f2347] rounded-lg text-xs font-semibold text-slate-300 border border-[#14294a] transition shadow-sm cursor-pointer"
                           >
                             <Download className="w-3.5 h-3.5 text-teal-400" />
                             <span>PDF</span>
@@ -202,7 +300,7 @@ export default function ConvoyTracker({ convoys = [], onConvoyAdded, onConvoyDel
                               <button
                                 onClick={() => handleCompleteTrip(convoyId)}
                                 title="Mark Convoy Delivery Complete"
-                                className="p-1.5 bg-[#050c1a] hover:bg-emerald-950/60 rounded-lg text-emerald-400 border border-[#14294a] hover:border-emerald-500/40 transition shadow-sm"
+                                className="p-1.5 bg-[#050c1a] hover:bg-emerald-950/60 rounded-lg text-emerald-400 border border-[#14294a] hover:border-emerald-500/40 transition shadow-sm cursor-pointer"
                               >
                                 <CheckCircle className="w-3.5 h-3.5" />
                               </button>
@@ -211,7 +309,7 @@ export default function ConvoyTracker({ convoys = [], onConvoyAdded, onConvoyDel
                                 onClick={() => handleDeleteConvoy(convoyId, convoy.vehicleNumber)}
                                 disabled={deletingId === convoyId}
                                 title="Delete / Cancel Convoy"
-                                className="p-1.5 bg-[#050c1a] hover:bg-rose-950/60 rounded-lg text-rose-400 border border-[#14294a] hover:border-rose-500/40 transition shadow-sm"
+                                className="p-1.5 bg-[#050c1a] hover:bg-rose-950/60 rounded-lg text-rose-400 border border-[#14294a] hover:border-rose-500/40 transition shadow-sm cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>

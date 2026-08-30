@@ -867,7 +867,10 @@ export default function GisMap({
           const rData = convoyRoutes[convoyKey];
           let lat, lng;
 
-          if (rData && rData.polyline && rData.polyline.length > 0) {
+          if (focusedConvoy.isLiveStreaming && focusedConvoy.currentLatitude && focusedConvoy.currentLongitude) {
+            lat = Number(focusedConvoy.currentLatitude);
+            lng = Number(focusedConvoy.currentLongitude);
+          } else if (rData && rData.polyline && rData.polyline.length > 0) {
             const stepIdx = convoyStepIndices[convoyKey] || 0;
             const roadPoint = rData.polyline[stepIdx] || rData.polyline[0];
             lat = roadPoint[0];
@@ -878,7 +881,7 @@ export default function GisMap({
           }
 
           const isMeds = focusedConvoy.commodityType === 'MEDICINES';
-          const iconColor = isMeds ? '#10b981' : '#f59e0b';
+          const iconColor = focusedConvoy.isLiveStreaming ? '#06b6d4' : (isMeds ? '#10b981' : '#f59e0b');
 
           return (
             <Marker
@@ -890,15 +893,25 @@ export default function GisMap({
                 <div className="p-2 text-xs font-sans min-w-[200px]">
                   <div className="flex justify-between items-center border-b pb-1 mb-1">
                     <strong className="text-slate-900">{focusedConvoy.vehicleNumber}</strong>
-                    <span className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${isMeds ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                      {focusedConvoy.commodityType}
+                    <span className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
+                      focusedConvoy.isLiveStreaming
+                        ? 'bg-cyan-100 text-cyan-800 animate-pulse'
+                        : isMeds
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {focusedConvoy.isLiveStreaming ? '📡 LIVE DEVICE GPS' : focusedConvoy.commodityType}
                     </span>
                   </div>
                   <p className="text-slate-700"><strong>Driver:</strong> {focusedConvoy.driverName || 'Lead Driver'}</p>
                   <p className="text-slate-700"><strong>Route:</strong> {focusedConvoy.originCity} → {focusedConvoy.destinationCity}</p>
                   <p className="text-slate-700"><strong>Speed:</strong> {focusedConvoy.speedKmh || 45} km/h</p>
+                  <p className="text-slate-700"><strong>GPS:</strong> {lat.toFixed(4)}°N, {lng.toFixed(4)}°E</p>
                   <p className="text-slate-700">
-                    <strong>Cold-Chain Temp:</strong> <span className="font-bold text-emerald-700">{focusedConvoy.temperatureCelsius}°C</span>
+                    <strong>Refrigeration:</strong>{' '}
+                    <span className={focusedConvoy.temperatureCelsius < 8.0 ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                      {focusedConvoy.temperatureCelsius != null ? focusedConvoy.temperatureCelsius.toFixed(1) : '4.0'}°C
+                    </span>
                   </p>
                 </div>
               </Popup>

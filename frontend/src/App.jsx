@@ -513,6 +513,10 @@ function MainApp() {
                 setConvoys((prev) => [newConvoy, ...prev]);
                 setFocusedConvoyId(newConvoy.id || newConvoy.convoyId);
               }}
+              onConvoyUpdated={(updatedConvoy) => {
+                const uId = updatedConvoy.id || updatedConvoy.convoyId;
+                setConvoys((prev) => prev.map((c) => ((c.id || c.convoyId) === uId ? updatedConvoy : c)));
+              }}
               onConvoyDeleted={(deletedId) => {
                 setConvoys((prev) => prev.filter((c) => (c.id || c.convoyId) !== deletedId));
               }}
