@@ -18,6 +18,7 @@ import {
 import { searchLocations } from '../services/geocoding';
 import { calculateUniversalRoute, calculateMultiWaypointRoute, calculateAllRouteAlternatives, snapToNearestHighway } from '../services/osrm';
 import { api } from '../services/api';
+import { fetchLiveRouteWeather } from '../services/weather';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import XaiWaterfallChart from './XaiWaterfallChart';
@@ -331,10 +332,23 @@ export default function RoutePlanner({
       const anyHazardPresent = hasHazardA || hasHazardB || hasHazardC;
       const primaryBlockedHazard = hitsA[0] || hitsC[0] || hitsB[0] || null;
 
+      // Query Live Open-Meteo Meteorological Satellite Radar at Route Midpoint
+      const midLat = (activeOriginCoords[0] + activeDestCoords[0]) / 2;
+      const midLng = (activeOriginCoords[1] + activeDestCoords[1]) / 2;
+      let liveWeather = null;
+      try {
+        liveWeather = await fetchLiveRouteWeather(midLat, midLng);
+      } catch (e) {
+        console.warn('Live weather query fallback:', e);
+      }
+
       // Dynamic Risk Scores
-      const riskScoreA = hasHazardA ? 0.92 : hillRiskScore;
-      const riskScoreB = hasHazardB ? 0.88 : Math.max(0.08, Math.round((hillRiskScore * 0.35) * 100) / 100);
-      const riskScoreC = hasHazardC ? 0.90 : (isWaterwayFeasible ? 0.05 : Math.max(0.12, Math.round((hillRiskScore * 0.45) * 100) / 100));
+      const weatherRiskBump = liveWeather?.rainPast48h > 35 ? 0.25 : (liveWeather?.currentRain > 1.0 ? 0.15 : 0.0);
+      const baseRisk = hillRiskScore + weatherRiskBump;
+
+      const riskScoreA = hasHazardA ? 0.92 : Math.min(0.95, baseRisk);
+      const riskScoreB = hasHazardB ? 0.88 : Math.max(0.08, Math.round((baseRisk * 0.35) * 100) / 100);
+      const riskScoreC = hasHazardC ? 0.90 : (isWaterwayFeasible ? 0.05 : Math.max(0.12, Math.round((baseRisk * 0.45) * 100) / 100));
 
       const optA = {
         routeId: 'ROUTE_OPT_A_HIGHWAY',
@@ -351,15 +365,16 @@ export default function RoutePlanner({
         destinationLabel: destinationQuery,
         snappedCoordinates: directCoords,
         activeHazard: hasHazardA ? hitsA[0] : null,
+        liveWeather,
         steps: [
           { fromHub: originQuery, toHub: destinationQuery, highwayCode: directRoute.summary || 'NH Highway', distanceKm: directDist, riskScore: riskScoreA, status: hasHazardA ? 'BLOCKED' : (riskScoreA > 0.5 ? 'CAUTION' : 'OPEN') }
         ],
         explainability: {
           naturalLanguageSummary: hasHazardA
             ? `🚨 CRITICAL HAZARD DETECTED: Active verified ${hitsA[0].incidentType || 'Hazard'} (${hitsA[0].description || 'Road Blockage'}) reported near ${hitsA[0].roadSegmentName || 'Corridor Coordinate'} (${Number(hitsA[0].latitude).toFixed(2)}°N, ${Number(hitsA[0].longitude).toFixed(2)}°E). Severe stoppage delay expected.`
-            : (isHillRoute
-              ? `Direct highway traversal over mountain passes. Open-Meteo satellite feed detects active slope saturation near hill passes; moderate stoppage risk expected.`
-              : `Nominal weather and terrain stability across the corridor. Recommended direct transit path for ${commodity}.`),
+            : (liveWeather && liveWeather.rainPast48h > 20
+              ? `Live Open-Meteo satellite feed detects ${liveWeather.weatherDescription} (~${liveWeather.rainPast48h} mm 48h rain) at ${midLat.toFixed(2)}°N, ${midLng.toFixed(2)}°E. Elevated soil moisture requires reduced convoy speed.`
+              : `Optimal weather clearance (${liveWeather?.weatherDescription || 'Clear Sky'}, ${liveWeather?.currentTemp || 24}°C) and nominal terrain stability across the corridor. Recommended direct transit path for ${commodity}.`),
         }
       };
 
@@ -371,13 +386,14 @@ export default function RoutePlanner({
         estimatedHours: hasHazardB ? Math.round((bypassHours + 3.5) * 10) / 10 : bypassHours,
         overallRiskScore: riskScoreB,
         riskTier: hasHazardB ? 'CRITICAL' : (riskScoreB > 0.5 ? 'HIGH' : 'LOW'),
-        isRecommended: !hasHazardB && (hasHazardA || hasHazardC || hillRiskScore > 0.5),
+        isRecommended: hasHazardA && !hasHazardB,
         originCoords: activeOriginCoords,
         destinationCoords: activeDestCoords,
         originLabel: originQuery,
         destinationLabel: destinationQuery,
         snappedCoordinates: bypassCoords,
         activeHazard: hasHazardB ? hitsB[0] : null,
+        liveWeather,
         steps: [
           { fromHub: originQuery, toHub: 'Intermediate Logistics Waypoint', highwayCode: 'Regional Link', distanceKm: Math.round(bypassDist * 0.5), riskScore: riskScoreB, status: hasHazardB ? 'BLOCKED' : 'OPEN' },
           { fromHub: 'Intermediate Logistics Waypoint', toHub: destinationQuery, highwayCode: 'Connected Corridor', distanceKm: Math.round(bypassDist * 0.5), riskScore: 0.10, status: 'OPEN' }
@@ -408,6 +424,7 @@ export default function RoutePlanner({
           destinationLabel: destinationQuery,
           snappedCoordinates: waterwayCoords,
           activeHazard: null,
+          liveWeather,
           steps: [
             { fromHub: 'Pandu Port (Guwahati)', toHub: 'Dhubri River Terminal', highwayCode: 'NW-2 Waterway', distanceKm: 260.0, riskScore: 0.05, status: 'OPEN', transportMode: 'RIVER_BARGE' }
           ],
@@ -431,6 +448,7 @@ export default function RoutePlanner({
           destinationLabel: destinationQuery,
           snappedCoordinates: cCoords,
           activeHazard: hasHazardC ? hitsC[0] : null,
+          liveWeather,
           steps: [
             { fromHub: originQuery, toHub: 'Intermodal Freight Hub', highwayCode: cSummary, distanceKm: Math.round(cDist * 0.5), riskScore: riskScoreC, status: hasHazardC ? 'BLOCKED' : 'OPEN' },
             { fromHub: 'Intermodal Freight Hub', toHub: destinationQuery, highwayCode: 'Arterial Link', distanceKm: Math.round(cDist * 0.5), riskScore: 0.15, status: 'OPEN' }
@@ -813,6 +831,7 @@ export default function RoutePlanner({
             isHillRoute={selectedOption.overallRiskScore > 0.4 && !selectedOption.activeHazard}
             shapFactors={selectedOption.shapFactors || selectedOption.explainability?.shapFactors}
             plainLanguageJustification={selectedOption.explainability?.plainLanguageJustification}
+            liveWeather={selectedOption.liveWeather}
           />
         </div>
       )}
