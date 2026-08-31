@@ -8,7 +8,11 @@ export const AuthProvider = ({ children }) => {
     const saved = localStorage.getItem('aura_ner_user');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && parsed.role) {
+          return parsed;
+        }
+        return null;
       } catch (e) {
         return null;
       }

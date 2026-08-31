@@ -44,7 +44,7 @@ export default function RoleSwitcher({ onOpenLoginModal }) {
     }
   };
 
-  const badge = getRoleBadge(currentUser.role);
+  const badge = getRoleBadge(currentUser?.role || '');
 
   return (
     <div className="relative" ref={dropdownRef}>

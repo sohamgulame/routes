@@ -187,7 +187,7 @@ function MainApp() {
             <div className="flex items-center space-x-2">
               <h1 className="text-base font-bold text-white tracking-tight font-display">AURA-NER</h1>
               <span className="px-2 py-0.5 text-[10px] font-extrabold bg-sky-500/15 text-sky-300 border border-sky-400/30 rounded-full uppercase tracking-wider font-mono">
-                {currentUser ? currentUser.role.replace('ROLE_', '') : 'GUEST'}
+                {currentUser?.role ? String(currentUser.role).replace('ROLE_', '') : 'GUEST'}
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-medium">
