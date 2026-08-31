@@ -1,6 +1,17 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:8080/api/v1' : '/api/v1');
+const rawApiUrl = import.meta.env.VITE_API_BASE_URL;
+let API_BASE_URL = 'https://auraner-backend.onrender.com/api/v1';
+
+if (typeof window !== 'undefined' && window.location.hostname === 'localhost' && window.location.port === '5173') {
+  API_BASE_URL = 'http://localhost:10000/api/v1';
+} else if (rawApiUrl) {
+  if (rawApiUrl.startsWith('http://') || rawApiUrl.startsWith('https://')) {
+    API_BASE_URL = rawApiUrl;
+  } else if (!rawApiUrl.includes(':10000') && !rawApiUrl.includes('localhost')) {
+    API_BASE_URL = `https://${rawApiUrl}`;
+  }
+}
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,

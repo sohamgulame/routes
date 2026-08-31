@@ -79,14 +79,6 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: auraner-backend
-          property: host
-          path: /api/v1
+        value: https://auraner-backend.onrender.com/api/v1
       - key: VITE_WS_URL
-        fromService:
-          type: web
-          name: auraner-backend
-          property: host
-          path: /ws-telemetry
+        value: https://auraner-backend.onrender.com/ws-telemetry
