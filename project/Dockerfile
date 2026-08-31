@@ -19,4 +19,4 @@ COPY --from=builder /app/target/*.jar app.jar
 ENV PORT=10000
 EXPOSE 10000
 
-ENTRYPOINT ["java", "-Xms256m", "-Xmx768m", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "java -Xms256m -Xmx768m -Dserver.port=${PORT:-10000} -jar app.jar"]
