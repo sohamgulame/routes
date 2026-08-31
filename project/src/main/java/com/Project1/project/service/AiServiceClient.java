@@ -23,11 +23,11 @@ public class AiServiceClient {
     ) {}
 
     public AiServiceClient(
-            @Value("${app.ai-service.url:http://localhost:8000}") String aiServiceUrl
+            @Value("${app.ai-service.url:https://auraner-ai.onrender.com}") String aiServiceUrl
     ) {
         String url = aiServiceUrl;
         if (url == null || url.trim().isEmpty()) {
-            url = "http://localhost:8000";
+            url = "https://auraner-ai.onrender.com";
         } else {
             url = url.trim();
             if (!url.startsWith("http://") && !url.startsWith("https://")) {

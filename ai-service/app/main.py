@@ -67,6 +67,22 @@ class PerishableDecayResponse(BaseModel):
 # ---------------------------------------------------------
 # REST API Endpoints
 # ---------------------------------------------------------
+@app.get("/")
+def root():
+    return {
+        "service": "AURA-NER AI & Hazard Analytics Microservice",
+        "status": "ONLINE",
+        "version": "1.0.0",
+        "docsUrl": "/docs",
+        "healthUrl": "/health",
+        "capabilities": [
+            "XGBoost Hazard Inference",
+            "SHAP Explainability",
+            "Perishable Shelf-Life Analytics"
+        ],
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }
+
 @app.get("/health")
 def health_check():
     return {

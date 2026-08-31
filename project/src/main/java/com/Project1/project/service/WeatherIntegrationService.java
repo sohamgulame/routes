@@ -6,11 +6,17 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class WeatherIntegrationService {
 
     private final WebClient webClient;
+    private final Map<String, CachedWeather> weatherCache = new ConcurrentHashMap<>();
+
+    private static final long CACHE_TTL_MILLIS = 10 * 60 * 1000; // 10 minutes cache
+
+    private record CachedWeather(RealWeatherMetrics metrics, long timestamp) {}
 
     public record RealWeatherMetrics(
             Double currentTemperatureCelsius,
@@ -28,9 +34,16 @@ public class WeatherIntegrationService {
     }
 
     /**
-     * Fetches real live weather & precipitation metrics from Open-Meteo satellite feed
+     * Fetches real live weather & precipitation metrics from Open-Meteo satellite feed (with 10-min caching to prevent 429 rate limits)
      */
     public RealWeatherMetrics fetchLiveWeather(double latitude, double longitude) {
+        String cacheKey = String.format("%.1f_%.1f", latitude, longitude);
+        long now = System.currentTimeMillis();
+        CachedWeather cached = weatherCache.get(cacheKey);
+        if (cached != null && (now - cached.timestamp()) < CACHE_TTL_MILLIS) {
+            return cached.metrics();
+        }
+
         try {
             Map response = webClient.get()
                     .uri(uriBuilder -> uriBuilder
@@ -80,18 +93,23 @@ public class WeatherIntegrationService {
                         ? soil.get(currentHourIdx)
                         : 0.35;
 
-                return new RealWeatherMetrics(
+                RealWeatherMetrics metrics = new RealWeatherMetrics(
                         Math.round(currentTemp * 10.0) / 10.0,
                         Math.round(rain24 * 10.0) / 10.0,
                         Math.round(rain48 * 10.0) / 10.0,
                         Math.round(soilMoisture * 100.0) / 100.0
                 );
+
+                weatherCache.put(cacheKey, new CachedWeather(metrics, now));
+                return metrics;
             }
         } catch (Exception e) {
             System.err.println("Open-Meteo Live API fallback: " + e.getMessage());
         }
 
         // Standard terrain baseline
-        return new RealWeatherMetrics(21.5, 45.0, 85.0, 0.45);
+        RealWeatherMetrics fallbackMetrics = new RealWeatherMetrics(21.5, 45.0, 85.0, 0.45);
+        weatherCache.put(cacheKey, new CachedWeather(fallbackMetrics, now));
+        return fallbackMetrics;
     }
 }

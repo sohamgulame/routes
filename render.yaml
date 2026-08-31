@@ -58,10 +58,7 @@ services:
           name: auraner-db
           property: password
       - key: AI_SERVICE_URL
-        fromService:
-          type: web
-          name: auraner-ai
-          property: host
+        value: https://auraner-ai.onrender.com
       - key: JWT_SECRET
         generateValue: true
       - key: TOMTOM_API_KEY
