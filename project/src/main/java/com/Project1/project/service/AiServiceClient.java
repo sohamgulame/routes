@@ -25,8 +25,17 @@ public class AiServiceClient {
     public AiServiceClient(
             @Value("${app.ai-service.url:http://localhost:8000}") String aiServiceUrl
     ) {
+        String url = aiServiceUrl;
+        if (url == null || url.trim().isEmpty()) {
+            url = "http://localhost:8000";
+        } else {
+            url = url.trim();
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                url = "http://" + url;
+            }
+        }
         this.webClient = WebClient.builder()
-                .baseUrl(aiServiceUrl)
+                .baseUrl(url)
                 .build();
     }
 
